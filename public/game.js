@@ -1,34 +1,71 @@
-/* ... весь твой код до WS ... */
+// ... весь твой код до WS остаётся без изменений ...
 
 const WS = {
   socket: null,
   roomId: null,
 
-  connect(...) { /* без изменений */ },
-
-  _init(serverUrl, resolve, reject) {
-    this.socket = io(...);
-    this.socket.on('connect', () => resolve());
-    /* ... все старые on() ... */
-
-    this.socket.on('friend_room_created', (data) => this.onFriendRoomCreated(data));
-    this.socket.on('opponent_joined', (data) => this.onOpponentJoined(data));
-    this.socket.on('matched', (data) => this.onMatched(data));
-    this.socket.on('game_start', (data) => this.onGameStart(data));
-    this.socket.on('turn', (data) => this.onTurn(data));
-    this.socket.on('shot_result', (data) => this.onShotResult(data));
+  connect(serverUrl) {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!window.io) {
+          const s = document.createElement('script');
+          s.src = (serverUrl || 'http://localhost:3000') + '/socket.io/socket.io.js';
+          s.onload = () => this._init(serverUrl, resolve, reject);
+          s.onerror = () => reject(new Error('Не удалось загрузить socket.io'));
+          document.head.appendChild(s);
+        } else {
+          this._init(serverUrl, resolve, reject);
+        }
+      } catch(e) { reject(e); }
+    });
   },
 
-  matchmake(mode, friendId) {
+  _init(serverUrl, resolve, reject) {
+    this.socket = io(serverUrl || 'http://localhost:3000', { transports: ['websocket'] });
+
+    this.socket.on('connect', () => resolve());
+    this.socket.on('connect_error', () => reject(new Error('Ошибка подключения')));
+    this.socket.on('disconnect', () => {
+      if (Game.active) showModal('Соединение потеряно', 'Игра прервана.', [
+        { label: 'В меню', cls: 'btn-primary', action: () => { closeModal(); showScreen('menu'); } }
+      ]);
+    });
+
+    this.socket.on('matched', (data) => WS.onMatched(data));
+    this.socket.on('friend_room_created', (data) => WS.onFriendRoomCreated(data));
+    this.socket.on('opponent_joined', (data) => WS.onOpponentJoined(data));
+    this.socket.on('enemy_ready', () => WS.onEnemyReady());
+    this.socket.on('my_ready_confirmed', () => WS.onMyReadyConfirmed());
+    this.socket.on('game_start', (data) => WS.onGameStart(data));
+    this.socket.on('turn', (data) => WS.onTurn(data));
+    this.socket.on('shot_result', (data) => WS.onShotResult(data));
+    this.socket.on('opponent_left', () => {
+      showModal('Соперник вышел', 'Засчитана победа!', [
+        { label: 'Ок', cls: 'btn-primary', action: () => { closeModal(); endGame('win'); } }
+      ]);
+    });
+  },
+
+  matchmake(mode, friendId = null) {
+    if (!this.socket) return;
     this.socket.emit('matchmake', {
       mode,
-      friendId,           // null = создать, строка = присоединиться
+      friendId,
       playerId: App.user.id,
       playerName: App.user.name,
     });
   },
 
-  /* === НОВЫЕ/ИСПРАВЛЕННЫЕ ХЕНДЛЕРЫ === */
+  sendShips(field) {
+    if (!this.socket) return;
+    this.socket.emit('place_ships', { roomId: this.roomId, field });
+  },
+
+  sendShot(r, c) {
+    if (!this.socket) return;
+    this.socket.emit('shoot', { roomId: this.roomId, r, c });
+  },
+
   onFriendRoomCreated(data) {
     this.roomId = data.roomId;
     Game.roomId = data.roomId;
@@ -42,7 +79,7 @@ const WS = {
       linkEl.style.whiteSpace = 'nowrap';
       linkEl.style.maxWidth = '100%';
     }
-    document.getElementById('invite-block').classList.remove('hidden');
+    document.getElementById('invite-block')?.classList.remove('hidden');
     document.getElementById('waiting-title').textContent = 'Ссылка готова!';
     document.getElementById('waiting-sub').textContent = 'Отправь другу по ссылке';
   },
@@ -52,7 +89,7 @@ const WS = {
     if (currentScreen === 'waiting') {
       document.getElementById('waiting-title').textContent = `Соперник ${data.opponent.name} подключился!`;
       document.getElementById('waiting-sub').textContent = 'Расставляй корабли и жми «Готов»';
-      setTimeout(() => startPlacement('online'), 1200);
+      setTimeout(() => startPlacement('online'), 800);
     }
   },
 
@@ -65,9 +102,17 @@ const WS = {
     setTimeout(() => startPlacement('online'), 800);
   },
 
+  onEnemyReady() {
+    document.getElementById('waiting-sub')?.textContent = 'Соперник готов! Ждём тебя...';
+  },
+
+  onMyReadyConfirmed() {
+    document.getElementById('waiting-sub')?.textContent = '✅ Ты готов! Ждём соперника...';
+  },
+
   onGameStart(data) {
     if (!Game.active) {
-      const myShips = Placement.getShipsForGame?.() || [];
+      const myShips = Placement.getShipsForGame?.() || Game.myShips || [];
       startGame('online', data.myBoard, myShips, data.enemyBoard, [], Game.opponent);
     }
   },
@@ -76,7 +121,7 @@ const WS = {
     Game.isMyTurn = data.isMyTurn;
     updateGameStatus();
     renderGameBoard();
-    if (Game.isMyTurn) setShowingField(true);   // авто-переключение на поле врага
+    if (Game.isMyTurn) setShowingField(true);
   },
 
   onShotResult(data) {
@@ -93,7 +138,6 @@ const WS = {
 
     renderGameBoard();
 
-    // звук + вибрация
     if (hit) {
       Sound.hit();
       if (sunk) Sound.sunk();
@@ -108,129 +152,24 @@ const WS = {
       return;
     }
 
-    // авто-переключение поля
     if (shooter === App.user.id) {
-      setShowingField(hit);   // попал — остаёмся на поле врага, промах — на своё
+      setShowingField(hit);
     } else {
-      setShowingField(false); // соперник выстрелил — показываем своё поле
+      setShowingField(false);
     }
   },
 
-  sendShot(r, c) {
-    this.socket.emit('shoot', { roomId: this.roomId, r, c });
-  },
-  /* ... остальные методы без изменений ... */
+  disconnect() {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+  }
 };
 
-/* ==================== ИСПРАВЛЕННЫЕ ФУНКЦИИ ==================== */
-async function startOnline(mode) {
-  showScreen('waiting');
-  document.getElementById('waiting-title').textContent = 'Подключение…';
-  document.getElementById('waiting-sub').textContent = 'Соединяемся с сервером';
+// ... остальной код game.js без изменений ...
 
-  const serverUrl = App.settings.server || window.location.origin;
-  try {
-    await WS.connect(serverUrl);
-
-    if (mode === 'friend') {
-      WS.matchmake('friend', null);   // создать комнату
-    } else if (mode === 'random') {
-      document.getElementById('waiting-title').textContent = 'Ищем соперника…';
-      WS.matchmake('random', null);
-    }
-  } catch (e) {
-    showModal('Нет сервера', 'Онлайн недоступен. Сыграй с ботом?', [
-      { label: 'С ботом', action: () => { closeModal(); startBotGame('bot-medium'); }},
-      { label: 'В меню', action: () => { closeModal(); showScreen('menu'); }}
-    ]);
-  }
-}
-
-function joinFriendRoom(roomId) {
-  showScreen('waiting');
-  document.getElementById('waiting-title').textContent = 'Подключение к другу...';
-  const serverUrl = App.settings.server || window.location.origin;
-  WS.connect(serverUrl).then(() => {
-    WS.matchmake('friend', roomId);
-  }).catch(() => {
-    showModal('Ошибка', 'Не удалось подключиться', [{label: 'OK', action: closeModal}]);
-  });
-}
-
-/* В playerShoot — только отправка на сервер для онлайн */
-function playerShoot(r, c) {
-  if (!Game.active || !Game.isMyTurn || Game.myShots[r][c] !== CELL_EMPTY) return;
-
-  if (Game.mode === 'online') {
-    WS.sendShot(r, c);
-    return;
-  }
-
-  // весь старый код для бота остаётся без изменений
-  /* ... твой оригинальный bot-код ... */
-}
-
-/* В DOMContentLoaded добавь: */
-window.addEventListener('DOMContentLoaded', async () => {
-  /* ... твой старый init ... */
-
-  // === ДЕСКТОП + БУРГЕР ===
-  const isDesktop = window.innerWidth >= 1024;
-  document.body.classList.toggle('desktop', isDesktop);
-
-  if (!isDesktop) {
-    const burger = document.createElement('button');
-    burger.id = 'burger-btn';
-    burger.innerHTML = '☰';
-    burger.style.cssText = 'position:fixed;top:15px;right:15px;z-index:9999;font-size:28px;background:none;border:none;color:white;';
-    document.body.appendChild(burger);
-
-    burger.addEventListener('click', () => {
-      showModal('Меню', '', [
-        { label: 'Сдаться 🏳️', cls: 'btn-danger', action: () => { closeModal(); document.getElementById('btn-surrender')?.click(); }},
-        { label: App.settings.sound ? '🔊 Выключить звук' : '🔇 Включить звук', action: () => {
-          App.settings.sound = !App.settings.sound;
-          saveJSON('bs_settings', App.settings);
-          initSoundButton();
-          closeModal();
-        }},
-        { label: 'Статистика', action: () => { closeModal(); showScreen('stats'); }}
-      ]);
-    });
-  }
-
-  // центрирование экранов ожидания
-  const oldShowScreen = showScreen;
-  showScreen = (name) => {
-    oldShowScreen(name);
-    if (name === 'waiting') {
-      const screen = document.getElementById('screen-waiting');
-      if (screen) screen.style.textAlign = 'center';
-    }
-  };
-
-  // исправление перекрытия дока кораблей
-  const oldStartPlacement = startPlacement;
-  startPlacement = (mode) => {
-    oldStartPlacement(mode);
-    setTimeout(() => {
-      const dock = document.getElementById('ship-dock');
-      if (dock) {
-        dock.style.maxHeight = '280px';
-        dock.style.overflowY = 'auto';
-      }
-    }, 200);
-  };
-
-  /* ... остальной код ... */
-});
-
-/* В URL-параметрах (приглашение) замени на: */
+// В DOMContentLoaded добавь/убедись, что есть:
 if (room) {
-  setTimeout(() => {
-    showModal('Приглашение', 'Тебя пригласили в игру!', [
-      { label: 'Подключиться', cls: 'btn-primary', action: () => { closeModal(); joinFriendRoom(room); }},
-      { label: 'Отмена', cls: 'btn-ghost', action: closeModal }
-    ]);
-  }, 400);
+  joinFriendRoom(room);
 }
