@@ -1140,6 +1140,7 @@ const WS = {
     });
      this.socket.on('my_ready_confirmed', () => WS.onMyReadyConfirmed());
   this.socket.on('game_start', (data) => WS.onGameStart(data));
+  this.socket.on('opponent_joined', (data) => WS.onOpponentJoined(data));
   
   },
 
@@ -1184,12 +1185,11 @@ onTurn(data) {
   renderGameBoard();
   
   // 👇 КРИТИЧНО: если всё ещё на waiting — переходим в игру
-  if (currentScreen === 'waiting') {
+  if (!Game.active) {
     const myShips = Placement.getShipsForGame?.() || Game.myShips || [];
-    // Для онлайн-игры: enemyBoard пустой (мы не видим корабли врага)
     startGame('online', Placement.board, myShips, makeBoard(), [], Game.opponent);
   }
-},
+},  
 
   onShotResult(data) {
     const { r, c, hit, sunk, gameOver, winner } = data;
@@ -1228,6 +1228,13 @@ onTurn(data) {
                 data.enemyBoard || makeBoard(), [], Game.opponent);
     }
   },
+
+  onOpponentJoined(data) {
+  Game.opponent = { name: data.opponent.name, id: data.opponent.id };
+  document.getElementById('opp-name').textContent = data.opponent.name;
+  console.log('👥 Соперник подключился:', data.opponent);
+},
+
 };
 
 /* ─── РАССТАНОВКА ПЕРЕД ОНЛАЙН-ИГРОЙ ────────────── */
