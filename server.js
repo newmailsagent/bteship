@@ -140,6 +140,7 @@ io.on('connection', (socket) => {
     socket.data.playerId = playerId;
     
     upsertPlayer(playerId, playerName, '');
+    socket.data.playerId = playerId;  // 👇 Добавить эту строку
 
     if (mode === 'random') {
       // Ищем кого-то в пуле
@@ -159,22 +160,44 @@ io.on('connection', (socket) => {
         waitingPool.push(player);
         socket.data.waiting = true;
       }
-    } else if (mode && mode.startsWith('friend_')) {
-      // Режим комнаты по приглашению
-      const roomId = mode.replace('friend_','');
-      if (rooms.has(roomId)) {
-        const room = rooms.get(roomId);
-        room.p2 = { ...player, field: null, ready: false, shots: 0, hits: 0 };
-        socket.join(roomId);
-        io.to(room.p1.socketId).emit('matched', { roomId, opponent: { id: player.id, name: player.name } });
-        io.to(room.p2.socketId).emit('matched', { roomId, opponent: { id: room.p1.id, name: room.p1.name } });
-      } else {
-        // Создаём комнату и ждём второго
-        const room = new RoomState(roomId, player, { socketId: null, id: null, name: '?', field: null, ready: false, shots: 0, hits: 0 });
-        rooms.set(roomId, room);
-        socket.join(roomId);
-      }
+    } else if ((mode && mode.startsWith('friend_')) || (mode === 'friend' && friendId)) {
+  const roomId = (mode && mode.startsWith('friend_')) 
+    ? mode.replace('friend_', '') 
+    : friendId;
+    
+  if (rooms.has(roomId)) {
+    const room = rooms.get(roomId);
+    // Если p2 уже занят — не даём подключиться третьему
+    if (room.p2?.socketId && room.p2.socketId !== socket.id) {
+      socket.emit('error', { message: 'Комната уже заполнена' });
+      return;
     }
+    room.p2 = { ...player, field: null, ready: false, shots: 0, hits: 0 };
+    socket.join(roomId);
+    
+    // 👇 Исправленная отправка matched (используем socket.emit для надёжности)
+    io.sockets.sockets.get(room.p1.socketId)?.emit('matched', { 
+      roomId, 
+      opponent: { id: player.id, name: player.name } 
+    });
+    socket.emit('matched', { 
+      roomId, 
+      opponent: { id: room.p1.id, name: room.p1.name } 
+    });
+  } else {
+    // Создаём комнату, ждём второго
+    const room = new RoomState(roomId, player, { 
+      socketId: null, id: null, name: '?', field: null, ready: false, shots: 0, hits: 0 
+    });
+    rooms.set(roomId, room);
+    socket.join(roomId);
+    // 👇 Важно: первый игрок тоже должен получить matched, чтобы перейти в расстановку
+    socket.emit('matched', { 
+      roomId, 
+      opponent: { id: '?', name: 'Ожидание...' } 
+    });
+  }
+}
   });
 
   /**

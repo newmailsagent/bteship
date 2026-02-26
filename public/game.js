@@ -1140,6 +1140,7 @@ const WS = {
     });
      this.socket.on('my_ready_confirmed', () => WS.onMyReadyConfirmed());
   this.socket.on('game_start', (data) => WS.onGameStart(data));
+  
   },
 
   matchmake(mode, friendId) {
@@ -1176,17 +1177,17 @@ const WS = {
     document.getElementById('waiting-title').textContent = 'Соперник готов!';
   },
 
-  onTurn(data) {
+onTurn(data) {
   console.log('🎯 [TURN] isMyTurn:', data.isMyTurn, 'roomId:', data.roomId);
   Game.isMyTurn = data.isMyTurn;
   updateGameStatus();
   renderGameBoard();
   
-  // 👇 Если получили turn, но всё ещё на waiting — переходим в игру
+  // 👇 КРИТИЧНО: если всё ещё на waiting — переходим в игру
   if (currentScreen === 'waiting') {
     const myShips = Placement.getShipsForGame?.() || Game.myShips || [];
-    startGame('online', Placement.board, myShips, 
-              Game.enemyBoard || makeBoard(), [], Game.opponent);
+    // Для онлайн-игры: enemyBoard пустой (мы не видим корабли врага)
+    startGame('online', Placement.board, myShips, makeBoard(), [], Game.opponent);
   }
 },
 
