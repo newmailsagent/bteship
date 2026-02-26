@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Морской бой</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: ЗАГРУЗКА
+════════════════════════════════════════════ -->
+<div id="screen-loading" class="screen active">
+  <div class="loading-inner">
+    <div class="loading-grid">
+      <span></span><span></span><span></span>
+      <span></span><span></span><span></span>
+      <span></span><span></span><span></span>
+    </div>
+    <p class="loading-text">МОРСКОЙ БОЙ</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: ГЛАВНОЕ МЕНЮ
+════════════════════════════════════════════ -->
+<div id="screen-menu" class="screen">
+  <header class="menu-header">
+    <div class="user-info">
+      <div class="avatar" id="user-avatar">?</div>
+      <div class="user-details">
+        <span class="username" id="user-name">Гость</span>
+        <span class="user-tag" id="user-tag">@unknown</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="btn-sound" id="btn-sound-toggle" title="Звук">
+        <svg id="sound-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path id="sound-waves" d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>
+      </button>
+      <div class="stats-mini">
+        <div class="stat-item">
+          <span class="stat-val" id="stat-wins">0</span>
+          <span class="stat-lbl">побед</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val" id="stat-total">0</span>
+          <span class="stat-lbl">боёв</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="menu-hero">
+    <div class="hero-grid" id="hero-grid"></div>
+    <h1 class="hero-title">МОРСКОЙ<br/>БОЙ</h1>
+  </div>
+
+  <nav class="menu-nav">
+    <button class="btn btn-primary btn-large" data-screen="mode">
+      НОВАЯ ИГРА
+    </button>
+    <div class="btn-row">
+      <button class="btn btn-secondary" data-screen="leaderboard">
+        Лидерборд
+      </button>
+      <button class="btn btn-secondary" data-screen="stats">
+        Статистика
+      </button>
+    </div>
+    <button class="btn btn-ghost" data-screen="settings">
+      Настройки
+    </button>
+  </nav>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: ВЫБОР РЕЖИМА
+════════════════════════════════════════════ -->
+<div id="screen-mode" class="screen">
+  <div class="page-header">
+    <button class="btn-back" data-screen="menu">← Назад</button>
+    <h2>Режим игры</h2>
+  </div>
+  <div class="mode-list">
+    <button class="mode-card" id="mode-random">
+      <div class="mode-info">
+        <strong>Случайный соперник</strong>
+        <span>Найти игрока онлайн</span>
+      </div>
+      <div class="mode-badge online" id="badge-online">ОНЛАЙН</div>
+    </button>
+    <button class="mode-card" id="mode-friend">
+      <div class="mode-info">
+        <strong>С другом</strong>
+        <span>Пригласить по ссылке</span>
+      </div>
+    </button>
+    <button class="mode-card" id="mode-bot-easy">
+      <div class="mode-info">
+        <strong>Против бота</strong>
+        <span>Лёгкая сложность</span>
+      </div>
+      <div class="mode-badge">ЛЕГКО</div>
+    </button>
+    <button class="mode-card" id="mode-bot-medium">
+      <div class="mode-info">
+        <strong>Против бота</strong>
+        <span>Средняя сложность</span>
+      </div>
+      <div class="mode-badge medium">СРЕДНЕ</div>
+    </button>
+    <button class="mode-card" id="mode-bot-hard">
+      <div class="mode-info">
+        <strong>Против бота</strong>
+        <span>Тяжёлая сложность — ИИ-охота</span>
+      </div>
+      <div class="mode-badge hard">СЛОЖНО</div>
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: РАССТАНОВКА КОРАБЛЕЙ
+════════════════════════════════════════════ -->
+<div id="screen-placement" class="screen">
+  <div class="page-header">
+    <button class="btn-back" data-screen="mode">← Назад</button>
+    <h2>Расставь корабли</h2>
+  </div>
+
+  <div class="placement-ships" id="ship-dock">
+    <!-- корабли для перетаскивания генерируются в JS -->
+  </div>
+
+  <div class="placement-controls">
+    <button class="btn btn-sm" id="btn-rotate">↻ Повернуть</button>
+    <button class="btn btn-sm btn-ghost" id="btn-random-place">Случайно</button>
+    <button class="btn btn-sm btn-ghost" id="btn-clear-place">Очистить</button>
+  </div>
+
+  <div class="board-wrap" id="placement-board-wrap">
+    <div class="board-outer">
+      <div class="board-labels-col" id="placement-col-labels"></div>
+      <div class="board-container">
+        <div class="board-labels-row" id="placement-row-labels"></div>
+        <div class="board" id="placement-board"></div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary btn-large" id="btn-ready" disabled>
+    ✓ Готов к бою
+  </button>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: ОЖИДАНИЕ СОПЕРНИКА
+════════════════════════════════════════════ -->
+<div id="screen-waiting" class="screen">
+  <div class="waiting-inner">
+    <div class="radar-anim">
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-dot"></div>
+    </div>
+    <h2 id="waiting-title">Ищем соперника…</h2>
+    <p id="waiting-sub">Это займёт несколько секунд</p>
+    <div class="invite-block hidden" id="invite-block">
+      <p>Или поделись ссылкой с другом:</p>
+      <div class="invite-link-row">
+        <span class="invite-link" id="invite-link-text"></span>
+        <button class="btn btn-sm" id="btn-copy-link">Копировать</button>
+      </div>
+    </div>
+    <button class="btn btn-ghost" id="btn-cancel-wait" data-screen="menu">Отмена</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: ИГРА
+════════════════════════════════════════════ -->
+<div id="screen-game" class="screen">
+  <div class="game-topbar">
+    <div class="game-toggle" id="field-toggle">
+      <button class="toggle-btn active" id="btn-show-enemy">Врага</button>
+      <button class="toggle-btn" id="btn-show-mine">Моё</button>
+    </div>
+    <div class="game-status" id="game-status">Твой ход</div>
+    <div class="ships-left" id="ships-left">
+      <span id="my-ships-left"></span> <span id="enemy-ships-left"></span>
+    </div>
+  </div>
+
+  <div class="board-wrap" id="game-board-wrap">
+    <div class="board-outer">
+      <div class="board-labels-col" id="game-col-labels"></div>
+      <div class="board-container">
+        <div class="board-labels-row" id="game-row-labels"></div>
+        <div class="board" id="game-board"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fix 3: Enemy remaining ships panel -->
+  <div class="enemy-fleet" id="enemy-fleet">
+    <span class="enemy-fleet-label">Осталось у врага:</span>
+    <div class="enemy-fleet-ships" id="enemy-fleet-ships"></div>
+  </div>
+
+  <div class="game-footer">
+    <div class="opponent-info" id="opponent-info">
+      <span id="opp-name">Соперник</span>
+    </div>
+    <button class="btn btn-sm btn-danger" id="btn-surrender">Сдаться</button>
+  </div>
+
+  <!-- Анимация попадания/промаха -->
+  <div class="shot-feedback hidden" id="shot-feedback">
+    <span id="shot-feedback-text"></span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: КОНЕЦ ИГРЫ
+════════════════════════════════════════════ -->
+<div id="screen-gameover" class="screen">
+  <div class="gameover-inner">
+    <div class="gameover-icon" id="gameover-icon">🏆</div>
+    <h1 class="gameover-title" id="gameover-title">ПОБЕДА!</h1>
+    <p class="gameover-sub" id="gameover-sub">Ты потопил все корабли!</p>
+    <div class="gameover-stats">
+      <div class="go-stat"><span id="go-shots">0</span><small>выстрелов</small></div>
+      <div class="go-stat"><span id="go-hits">0</span><small>попаданий</small></div>
+      <div class="go-stat"><span id="go-acc">0%</span><small>точность</small></div>
+    </div>
+    <div class="btn-col">
+      <button class="btn btn-primary btn-large" id="btn-rematch">🔄 Реванш</button>
+      <button class="btn btn-secondary" data-screen="menu">← Главное меню</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: ЛИДЕРБОРД
+════════════════════════════════════════════ -->
+<div id="screen-leaderboard" class="screen">
+  <div class="page-header">
+    <button class="btn-back" data-screen="menu">← Назад</button>
+    <h2>🏆 Лидерборд</h2>
+  </div>
+  <div class="leaderboard-list" id="leaderboard-list">
+    <p class="empty-state">Загрузка…</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: СТАТИСТИКА
+════════════════════════════════════════════ -->
+<div id="screen-stats" class="screen">
+  <div class="page-header">
+    <button class="btn-back" data-screen="menu">← Назад</button>
+    <h2>📊 Статистика</h2>
+  </div>
+  <div class="stats-profile">
+    <div class="stats-avatar" id="stats-avatar">?</div>
+    <div class="stats-name" id="stats-name">Гость</div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card green"><span id="st-wins">0</span><small>Победы</small></div>
+    <div class="stat-card red"><span id="st-losses">0</span><small>Поражения</small></div>
+    <div class="stat-card yellow"><span id="st-draws">0</span><small>Ничьи</small></div>
+    <div class="stat-card blue"><span id="st-total">0</span><small>Всего боёв</small></div>
+    <div class="stat-card"><span id="st-acc">0%</span><small>Точность</small></div>
+    <div class="stat-card"><span id="st-winrate">0%</span><small>Винрейт</small></div>
+  </div>
+  <h3 class="section-title">Последние бои</h3>
+  <div class="history-list" id="history-list">
+    <p class="empty-state">Ещё нет сыгранных боёв</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ЭКРАН: НАСТРОЙКИ
+════════════════════════════════════════════ -->
+<div id="screen-settings" class="screen">
+  <div class="page-header">
+    <button class="btn-back" data-screen="menu">← Назад</button>
+    <h2>⚙️ Настройки</h2>
+  </div>
+  <div class="settings-list">
+    <div class="setting-item">
+      <span>Звуки</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="setting-sound" checked />
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+    <div class="setting-item">
+      <span>Вибрация</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="setting-vibro" checked />
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+    <div class="setting-item">
+      <span>Показывать подсказки</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="setting-hints" checked />
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+    <div class="setting-item">
+      <span>Анимации</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="setting-anim" checked />
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+    <div class="setting-item">
+      <span>Сервер</span>
+      <input type="text" id="setting-server" class="setting-input" placeholder="ws://localhost:3000" />
+    </div>
+    <button class="btn btn-danger btn-sm" id="btn-reset-stats">Сбросить статистику</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     МОДАЛЬНЫЕ ОКНА
+════════════════════════════════════════════ -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal" id="modal-box">
+    <h3 id="modal-title">Заголовок</h3>
+    <p id="modal-body">Текст</p>
+    <div class="modal-btns" id="modal-btns"></div>
+  </div>
+</div>
+
+<!-- ЗВУКОВЫЕ ЭФФЕКТЫ (AudioContext) — без файлов -->
+<script src="game.js"></script>
+</body>
+</html>
