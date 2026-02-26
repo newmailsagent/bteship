@@ -137,6 +137,8 @@ io.on('connection', (socket) => {
     const { mode, friendId, playerId, playerName } = data;
     const player = { socketId: socket.id, id: playerId, name: playerName };
 
+    socket.data.playerId = playerId;
+    
     upsertPlayer(playerId, playerName, '');
 
     if (mode === 'random') {
@@ -192,11 +194,20 @@ io.on('connection', (socket) => {
     const opp = room.getOpponent(socket.id);
     io.to(opp.socketId).emit('enemy_ready');
 
+    io.to(socket.id).emit('my_ready_confirmed');
+
     if (room.bothReady()) {
       room.started = true;
       io.to(room.p1.socketId).emit('turn', { roomId, isMyTurn: true });
       io.to(room.p2.socketId).emit('turn', { roomId, isMyTurn: false });
     }
+
+    io.to(roomId).emit('game_start', { 
+    myBoard: room.p1.field, 
+    enemyBoard: room.p2.field,
+    isMyTurn: room.turn === room.p1.id 
+  });
+  
   });
 
   /**

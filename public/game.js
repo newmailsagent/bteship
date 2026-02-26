@@ -3,6 +3,12 @@
    Вся игровая логика: расстановка, ходы, бот, WebSocket, UI
 ═══════════════════════════════════════════════════════════════ */
 
+
+
+
+
+
+
 'use strict';
 
 /* ─── КОНСТАНТЫ ──────────────────────────────────── */
@@ -1123,6 +1129,7 @@ const WS = {
       ]);
     });
     this.socket.on('matched', (data) => WS.onMatched(data));
+    
     this.socket.on('enemy_ready', () => WS.onEnemyReady());
     this.socket.on('turn', (data) => WS.onTurn(data));
     this.socket.on('shot_result', (data) => WS.onShotResult(data));
@@ -1131,6 +1138,8 @@ const WS = {
         { label: 'Ок', cls: 'btn-primary', action: () => { closeModal(); endGame('win'); } }
       ]);
     });
+     this.socket.on('my_ready_confirmed', () => WS.onMyReadyConfirmed());
+  this.socket.on('game_start', (data) => WS.onGameStart(data));
   },
 
   matchmake(mode, friendId) {
@@ -1168,10 +1177,18 @@ const WS = {
   },
 
   onTurn(data) {
-    Game.isMyTurn = data.isMyTurn;
-    updateGameStatus();
-    renderGameBoard();
-  },
+  console.log('🎯 [TURN] isMyTurn:', data.isMyTurn, 'roomId:', data.roomId);
+  Game.isMyTurn = data.isMyTurn;
+  updateGameStatus();
+  renderGameBoard();
+  
+  // 👇 Если получили turn, но всё ещё на waiting — переходим в игру
+  if (currentScreen === 'waiting') {
+    const myShips = Placement.getShipsForGame?.() || Game.myShips || [];
+    startGame('online', Placement.board, myShips, 
+              Game.enemyBoard || makeBoard(), [], Game.opponent);
+  }
+},
 
   onShotResult(data) {
     const { r, c, hit, sunk, gameOver, winner } = data;
@@ -1191,6 +1208,24 @@ const WS = {
 
   disconnect() {
     if (this.socket) { this.socket.disconnect(); this.socket = null; }
+  },
+
+  onMyReadyConfirmed() {
+    // Обновляем текст в экране ожидания
+    const sub = document.getElementById('waiting-sub');
+    if (sub) sub.textContent = '✅ Вы готовы! Ждём соперника...';
+    console.log('🎯 [WS] Моя готовность подтверждена сервером');
+  },
+  
+  onGameStart(data) {
+    console.log('🚀 [WS] Game start received:', data);
+    // Фолбэк: если всё ещё на экране waiting — переходим в игру
+    if (currentScreen === 'waiting') {
+      // Берём наши корабли из Placement (если игра только началась)
+      const myShips = Placement.getShipsForGame?.() || Game.myShips || [];
+      startGame('online', data.myBoard || Placement.board, myShips, 
+                data.enemyBoard || makeBoard(), [], Game.opponent);
+    }
   },
 };
 
