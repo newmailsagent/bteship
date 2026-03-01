@@ -4,20 +4,31 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Морской бой</title>
-  <!-- Блокируем TG CSS-переменные до загрузки стилей -->
-  <style>
-    :root {
-      --tg-theme-bg-color: initial !important;
-      --tg-theme-secondary-bg-color: initial !important;
-      --tg-theme-button-color: initial !important;
-      --tg-theme-button-text-color: initial !important;
-      --tg-theme-text-color: initial !important;
-      --tg-theme-hint-color: initial !important;
-      --tg-theme-link-color: initial !important;
-    }
-  </style>
   <link rel="stylesheet" href="style.css" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    // Сразу после загрузки TG скрипта — сбрасываем все его CSS переменные
+    // TG устанавливает их через style.setProperty на documentElement
+    ;(function() {
+      var tgVars = [
+        '--tg-theme-bg-color','--tg-theme-secondary-bg-color',
+        '--tg-theme-button-color','--tg-theme-button-text-color',
+        '--tg-theme-text-color','--tg-theme-hint-color',
+        '--tg-theme-link-color','--tg-viewport-height',
+        '--tg-viewport-stable-height','--tg-color-scheme'
+      ];
+      // Удаляем TG переменные с :root
+      tgVars.forEach(function(v) {
+        document.documentElement.style.removeProperty(v);
+      });
+      // Перехватываем будущие попытки TG установить переменные
+      var orig = CSSStyleDeclaration.prototype.setProperty;
+      CSSStyleDeclaration.prototype.setProperty = function(name, value, priority) {
+        if (name && name.startsWith('--tg-theme')) return; // блокируем
+        return orig.call(this, name, value, priority);
+      };
+    })();
+  </script>
 </head>
 <body>
 
@@ -69,7 +80,7 @@
   <nav class="menu-nav">
     <button class="btn btn-primary btn-large" data-screen="mode">НОВАЯ ИГРА</button>
     <div class="btn-row">
-      <button class="btn btn-secondary" data-screen="leaderboard">Лидерборд</button>
+      <button class="btn btn-secondary" data-screen="leaderboard">Рейтинг</button>
       <button class="btn btn-secondary" data-screen="stats">Статистика</button>
     </div>
     <button class="btn btn-ghost" data-screen="settings">Настройки</button>
@@ -232,17 +243,32 @@
   </div>
 </div>
 
-<!-- ЛИДЕРБОРД -->
+<!-- РЕЙТИНГ -->
 <div id="screen-leaderboard" class="screen">
   <div class="page-header">
     <button class="btn-back" data-screen="menu">← Назад</button>
-    <h2>Лидерборд</h2>
+    <h2>Рейтинг</h2>
   </div>
   <div class="tg-promo-banner hidden" id="tg-promo-lb">
     Войди через Telegram чтобы попасть в рейтинг!
     <a href="https://t.me/bteship_bot/bteship" target="_blank">t.me/bteship_bot/bteship</a>
   </div>
-  <div class="leaderboard-list" id="leaderboard-list"><p class="empty-state">Загрузка…</p></div>
+
+  <!-- Мой рекорд -->
+  <div class="rating-section" id="my-record-section">
+    <div class="rating-section-title">Мой рекорд</div>
+    <div id="my-record-card" class="my-record-card">
+      <p class="empty-state">Нет данных</p>
+    </div>
+  </div>
+
+  <!-- Общий рейтинг -->
+  <div class="rating-section">
+    <div class="rating-section-title">Общий рейтинг
+      <span class="rating-hint">по сетевым боям · точность &lt;60%</span>
+    </div>
+    <div class="leaderboard-list" id="leaderboard-list"><p class="empty-state">Загрузка…</p></div>
+  </div>
 </div>
 
 <!-- СТАТИСТИКА -->

@@ -176,16 +176,26 @@ function isDesktop() {
 }
 
 /* ─── ПОЛЬЗОВАТЕЛЬ ───────────────────────────────── */
+/* ─── ОПРЕДЕЛЯЕМ — мы в TG или нет ─────────────── */
+function isInsideTelegram() {
+  try {
+    // initData непустая только когда реально открыто внутри TG
+    const initData = window.Telegram?.WebApp?.initData;
+    return typeof initData === 'string' && initData.length > 0;
+  } catch(e) { return false; }
+}
+
+/* ─── ПОЛЬЗОВАТЕЛЬ ───────────────────────────────── */
 function initUser() {
   let tgUser = null;
-  try {
-    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
-      tgUser = Telegram.WebApp.initDataUnsafe.user;
-    }
-  } catch(e) {}
+
+  if (isInsideTelegram()) {
+    try {
+      tgUser = window.Telegram.WebApp.initDataUnsafe?.user || null;
+    } catch(e) {}
+  }
 
   if (tgUser) {
-    // Внутри Telegram — берём данные из TG, isGuest всегда false
     App.user = {
       id:       String(tgUser.id),
       name:     tgUser.first_name || 'Игрок',
@@ -194,13 +204,10 @@ function initUser() {
       isGuest:  false,
     };
   } else {
-    // Не в TG — гость, всегда
+    // Не в TG — всегда гость
     const saved = loadJSON('bs_user', null);
-    if (saved && !saved.isGuest) {
-      // Старый кеш от TG-сессии — сбрасываем, это другой контекст
-      App.user = { id: 'guest_' + Date.now(), name: 'Гость', username: '', photo: null, isGuest: true };
-    } else if (saved?.isGuest) {
-      App.user = saved; // сохраняем guest_id чтобы не менялся каждый раз
+    if (saved?.isGuest) {
+      App.user = saved; // сохраняем guest_id
     } else {
       App.user = { id: 'guest_' + Date.now(), name: 'Гость', username: '', photo: null, isGuest: true };
     }
@@ -274,58 +281,87 @@ function updatePromoBanner() {
   if (bannerSt)   bannerSt.classList.toggle('hidden',   !isGuest);
 }
 
-/* ─── ЛИДЕРБОРД / СТАТИСТИКА ─────────────────────── */
+/* ─── РЕЙТИНГ ────────────────────────────────────── */
 async function renderLeaderboard() {
   const list = document.getElementById('leaderboard-list');
-  if (!list) return;
+  const myCard = document.getElementById('my-record-card');
+  const mySection = document.getElementById('my-record-section');
+  updatePromoBanner();
 
-  // Для гостей — только показываем промо
   if (App.user.isGuest) {
-    list.innerHTML = '<p class="empty-state">Войди через Telegram чтобы видеть рейтинг</p>';
+    if (list) list.innerHTML = '<p class="empty-state">Войди через Telegram чтобы видеть рейтинг</p>';
+    if (mySection) mySection.style.display = 'none';
     return;
   }
 
-  list.innerHTML = '<p class="empty-state">Загрузка…</p>';
-
-  // Сначала добавляем свои данные локально и на сервер
-  try {
-    await fetch(`/api/stats/${App.user.id}`); // upsert через активность
-  } catch(e) {}
+  if (mySection) mySection.style.display = '';
+  if (list) list.innerHTML = '<p class="empty-state">Загрузка…</p>';
 
   try {
-    // Грузим с сервера
-    const res = await fetch('/api/leaderboard');
+    const res  = await fetch('/api/rating');
     const json = await res.json();
-    if (json.ok && json.data?.length) {
-      renderLeaderboardData(json.data);
-      return;
-    }
-  } catch(e) {}
+    if (!json.ok) throw new Error();
 
-  // Fallback — локальный кеш
-  let lb = loadJSON('bs_leaderboard', []);
-  const me = { ...App.user, wins: App.stats.wins };
-  const idx = lb.findIndex(e => e.id === App.user.id);
-  if (idx >= 0) lb[idx] = me; else lb.push(me);
-  lb.sort((a,b) => b.wins - a.wins);
-  renderLeaderboardData(lb.slice(0,10));
+    const data   = json.data || [];
+    const myData = data.find(e => e.id === App.user.id);
+
+    // Мой рекорд
+    if (myCard) {
+      if (!myData || (myData.online_wins + myData.online_losses) === 0) {
+        myCard.innerHTML = '<p class="empty-state" style="margin:0;padding:8px 0">Сыграй хотя бы 1 сетевой бой!</p>';
+      } else {
+        const acc    = myData.online_shots > 0 ? Math.round(myData.online_hits / myData.online_shots * 100) : 0;
+        const total  = myData.online_wins + myData.online_losses;
+        const wr     = total ? Math.round(myData.online_wins / total * 100) : 0;
+        const score  = Math.round((myData.rating_score || 0) * 10) / 10;
+        const rank   = data.findIndex(e => e.id === App.user.id) + 1;
+        myCard.innerHTML = `
+          <div class="my-record-name">${App.user.name}
+            ${rank > 0 ? `<span class="rating-score-badge">#${rank}</span>` : ''}
+          </div>
+          <div class="my-record-grid">
+            <div><span class="my-record-val">${myData.online_wins}</span><span class="my-record-lbl">Победы</span></div>
+            <div><span class="my-record-val">${total}</span><span class="my-record-lbl">Боёв</span></div>
+            <div><span class="my-record-val">${wr}%</span><span class="my-record-lbl">Винрейт</span></div>
+            <div><span class="my-record-val">${acc}%</span><span class="my-record-lbl">Точность</span></div>
+          </div>`;
+      }
+    }
+
+    // Общий рейтинг
+    renderRatingList(data);
+
+  } catch(e) {
+    if (list) list.innerHTML = '<p class="empty-state">Ошибка загрузки</p>';
+  }
 }
 
-function renderLeaderboardData(data) {
+function renderRatingList(data) {
   const list = document.getElementById('leaderboard-list');
   if (!list) return;
-  const medals = ['gold','silver','bronze'];
+  const medals = ['gold', 'silver', 'bronze'];
   list.innerHTML = '';
-  if (!data.length) { list.innerHTML = '<p class="empty-state">Пока никого нет</p>'; return; }
+
+  if (!data.length) {
+    list.innerHTML = '<p class="empty-state">Пока нет сетевых игроков</p>';
+    return;
+  }
+
   data.forEach((entry, i) => {
-    const div = document.createElement('div');
-    div.className = 'lb-item';
-    const wins = entry.wins ?? 0;
+    const acc   = entry.online_shots > 0 ? Math.round(entry.online_hits / entry.online_shots * 100) : 0;
+    const total = (entry.online_wins || 0) + (entry.online_losses || 0);
+    const wr    = total ? Math.round(entry.online_wins / total * 100) : 0;
+    const isMe  = entry.id === App.user?.id;
+    const div   = document.createElement('div');
+    div.className = 'lb-item' + (isMe ? ' lb-item-me' : '');
     div.innerHTML = `
       <div class="lb-rank ${medals[i]||''}">${i < 3 ? ['🥇','🥈','🥉'][i] : i+1}</div>
       <div class="lb-avatar">${(entry.name||'?')[0].toUpperCase()}</div>
-      <div class="lb-info"><strong>${entry.name||'Игрок'}</strong>${entry.id===App.user?.id?' <small>(вы)</small>':''}</div>
-      <div class="lb-wins">${wins}</div>`;
+      <div class="lb-info">
+        <strong>${entry.name||'Игрок'}${isMe ? ' <small>(вы)</small>' : ''}</strong>
+        <small>${entry.online_wins}W · ${wr}% WR · ${acc}% ACC</small>
+      </div>
+      <div class="lb-wins">${entry.online_wins}</div>`;
     list.appendChild(div);
   });
 }
@@ -1421,30 +1457,17 @@ function initSoundButton() {
 
 /* ─── TELEGRAM ───────────────────────────────────── */
 function initTelegram() {
+  if (!isInsideTelegram()) return;
   try {
-    if (!window.Telegram?.WebApp) return;
     const tg = Telegram.WebApp;
     tg.ready();
     tg.expand();
-    tg.setHeaderColor('secondary_bg_color');
-    tg.enableClosingConfirmation();
+    try { tg.setHeaderColor('secondary_bg_color'); } catch(e) {}
+    try { tg.enableClosingConfirmation(); } catch(e) {}
 
-    // Помечаем что мы внутри TG — тогда CSS применяет TG-переменные
-    document.body.classList.add('tg-app');
-
-    // Светлая тема
+    // Светлая тема TG
     if (tg.colorScheme === 'light') {
       document.body.classList.add('theme-light');
-    } else {
-      // Дополнительная проверка по яркости bg
-      const bg = tg.themeParams?.bg_color || '';
-      if (bg) {
-        const hex = bg.replace('#','');
-        const r = parseInt(hex.substr(0,2),16)||0;
-        const g = parseInt(hex.substr(2,2),16)||0;
-        const b = parseInt(hex.substr(4,2),16)||0;
-        if ((r*299 + g*587 + b*114)/1000 > 128) document.body.classList.add('theme-light');
-      }
     }
   } catch(e) {}
 }

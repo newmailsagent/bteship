@@ -41,37 +41,90 @@ if (!fs.existsSync('./data')) fs.mkdirSync('./data');
 const db = new Database(DB_PATH);
 db.exec(`
   CREATE TABLE IF NOT EXISTS players (
-    id          TEXT PRIMARY KEY,
-    name        TEXT,
-    wins        INTEGER DEFAULT 0,
-    losses      INTEGER DEFAULT 0,
-    total_shots INTEGER DEFAULT 0,
-    total_hits  INTEGER DEFAULT 0,
-    updated_at  INTEGER DEFAULT (strftime('%s','now'))
+    id           TEXT PRIMARY KEY,
+    name         TEXT,
+    wins         INTEGER DEFAULT 0,
+    losses       INTEGER DEFAULT 0,
+    total_shots  INTEGER DEFAULT 0,
+    total_hits   INTEGER DEFAULT 0,
+    online_wins  INTEGER DEFAULT 0,
+    online_losses INTEGER DEFAULT 0,
+    online_shots INTEGER DEFAULT 0,
+    online_hits  INTEGER DEFAULT 0,
+    updated_at   INTEGER DEFAULT (strftime('%s','now'))
   );
 `);
 
-// п.4: чистим старых гостей из БД
+// Добавляем новые колонки если их нет (миграция)
+try { db.exec(`ALTER TABLE players ADD COLUMN online_wins    INTEGER DEFAULT 0`); } catch(e) {}
+try { db.exec(`ALTER TABLE players ADD COLUMN online_losses  INTEGER DEFAULT 0`); } catch(e) {}
+try { db.exec(`ALTER TABLE players ADD COLUMN online_shots   INTEGER DEFAULT 0`); } catch(e) {}
+try { db.exec(`ALTER TABLE players ADD COLUMN online_hits    INTEGER DEFAULT 0`); } catch(e) {}
+
+// Чистим гостей
 try { db.prepare(`DELETE FROM players WHERE id LIKE 'guest_%'`).run(); } catch(e) {}
 
 function upsertPlayer(id, name) {
-  if (id?.startsWith('guest_')) return; // гостей не пишем
+  if (id?.startsWith('guest_')) return;
   db.prepare(`
     INSERT INTO players (id, name) VALUES (?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, updated_at=strftime('%s','now')
   `).run(id, name || 'Игрок');
 }
-function addWin(id, shots, hits) {
+
+function addWin(id, shots, hits, isOnline = false) {
   if (id?.startsWith('guest_')) return;
-  db.prepare(`UPDATE players SET wins=wins+1, total_shots=total_shots+?, total_hits=total_hits+? WHERE id=?`).run(shots, hits, id);
+  if (isOnline) {
+    db.prepare(`UPDATE players SET
+      wins=wins+1, total_shots=total_shots+?, total_hits=total_hits+?,
+      online_wins=online_wins+1, online_shots=online_shots+?, online_hits=online_hits+?,
+      updated_at=strftime('%s','now') WHERE id=?
+    `).run(shots, hits, shots, hits, id);
+  } else {
+    db.prepare(`UPDATE players SET wins=wins+1, total_shots=total_shots+?, total_hits=total_hits+?,
+      updated_at=strftime('%s','now') WHERE id=?`).run(shots, hits, id);
+  }
 }
-function addLoss(id, shots, hits) {
+
+function addLoss(id, shots, hits, isOnline = false) {
   if (id?.startsWith('guest_')) return;
-  db.prepare(`UPDATE players SET losses=losses+1, total_shots=total_shots+?, total_hits=total_hits+? WHERE id=?`).run(shots, hits, id);
+  if (isOnline) {
+    db.prepare(`UPDATE players SET
+      losses=losses+1, total_shots=total_shots+?, total_hits=total_hits+?,
+      online_losses=online_losses+1, online_shots=online_shots+?, online_hits=online_hits+?,
+      updated_at=strftime('%s','now') WHERE id=?
+    `).run(shots, hits, shots, hits, id);
+  } else {
+    db.prepare(`UPDATE players SET losses=losses+1, total_shots=total_shots+?, total_hits=total_hits+?,
+      updated_at=strftime('%s','now') WHERE id=?`).run(shots, hits, id);
+  }
 }
-function getLeaderboard() {
-  return db.prepare(`SELECT id, name, wins, losses, total_shots, total_hits FROM players ORDER BY wins DESC LIMIT 50`).all();
+
+// Рейтинг: только online_wins, точность < 60% (анти-бот фильтр)
+// Формула: очки = online_wins * (1 - max(0, acc - 0.6) * 5)
+// То есть: при acc ≤ 60% множитель = 1.0, при acc = 80% множитель = 0.0
+function getRating() {
+  return db.prepare(`
+    SELECT id, name,
+      online_wins, online_losses, online_shots, online_hits,
+      CASE
+        WHEN online_shots > 0 THEN ROUND(CAST(online_hits AS REAL) / online_shots, 3)
+        ELSE 0
+      END AS accuracy,
+      CASE
+        WHEN online_wins + online_losses < 3 THEN 0
+        WHEN online_shots > 0 THEN
+          CAST(online_wins AS REAL) *
+          MAX(0, 1.0 - MAX(0, CAST(online_hits AS REAL)/online_shots - 0.6) * 5.0)
+        ELSE 0
+      END AS rating_score
+    FROM players
+    WHERE online_wins + online_losses >= 1
+    ORDER BY rating_score DESC, online_wins DESC
+    LIMIT 50
+  `).all();
 }
+
 function getPlayerStats(id) {
   return db.prepare(`SELECT * FROM players WHERE id=?`).get(id);
 }
@@ -138,8 +191,8 @@ function startTurnTimer(room) {
         winner: otherPlayer.playerId,
         loser:  timedOutPlayer.playerId,
       });
-      addWin(otherPlayer.playerId,  otherPlayer.shots,  otherPlayer.hits);
-      addLoss(timedOutPlayer.playerId, timedOutPlayer.shots, timedOutPlayer.hits);
+      addWin(otherPlayer.playerId,  otherPlayer.shots,  otherPlayer.hits,  true);
+      addLoss(timedOutPlayer.playerId, timedOutPlayer.shots, timedOutPlayer.hits, true);
     } else {
       // 1 просрочка — просто передаём ход
       room.turn = otherPlayer.playerId;
@@ -252,8 +305,8 @@ io.on('connection', (socket) => {
 
     if (allGone) {
       room.over = true;
-      addWin(shooter.playerId,  shooter.shots, shooter.hits);
-      addLoss(target.playerId,  target.shots,  target.hits);
+      addWin(shooter.playerId,  shooter.shots, shooter.hits, true);
+      addLoss(target.playerId,  target.shots,  target.hits,  true);
     } else {
       if (!hit) room.turn = target.playerId;
       // Запускаем таймер для следующего хода
@@ -272,8 +325,8 @@ io.on('connection', (socket) => {
     clearTurnTimer(room);
     io.to(winner.socketId).emit('opponent_surrendered');
     io.to(surrenderer.socketId).emit('surrender_confirmed');
-    addWin(winner.playerId,      winner.shots,      winner.hits);
-    addLoss(surrenderer.playerId, surrenderer.shots, surrenderer.hits);
+    addWin(winner.playerId,      winner.shots,      winner.hits,      true);
+    addLoss(surrenderer.playerId, surrenderer.shots, surrenderer.hits, true);
   });
 
   // п.5: отключение во время игры = победа оставшемуся
@@ -294,8 +347,8 @@ io.on('connection', (socket) => {
         if (stayer?.socketId && room.started) {
           // Игра уже шла — победа тому, кто остался
           io.to(stayer.socketId).emit('opponent_disconnected_win');
-          addWin(stayer.playerId,  stayer.shots,  stayer.hits);
-          addLoss(leaver.playerId, leaver.shots,  leaver.hits);
+          addWin(stayer.playerId,  stayer.shots,  stayer.hits,  true);
+          addLoss(leaver.playerId, leaver.shots,  leaver.hits,  true);
         } else {
           // Игра ещё не началась — просто уведомляем
           if (stayer?.socketId) io.to(stayer.socketId).emit('opponent_left');
@@ -327,7 +380,8 @@ function checkSunkServer(field, hitR, hitC) {
 }
 
 app.get('/api/config',     (req, res) => res.json({ botUsername: BOT_USERNAME }));
-app.get('/api/leaderboard',(req, res) => { try { res.json({ ok: true, data: getLeaderboard() }); } catch(e) { res.status(500).json({ ok: false, error: e.message }); } });
+app.get('/api/leaderboard',(req, res) => { try { res.json({ ok: true, data: getRating() }); } catch(e) { res.status(500).json({ ok: false, error: e.message }); } });
+app.get('/api/rating',    (req, res) => { try { res.json({ ok: true, data: getRating() }); } catch(e) { res.status(500).json({ ok: false, error: e.message }); } });
 app.get('/api/stats/:id',  (req, res) => { try { res.json({ ok: true, data: getPlayerStats(req.params.id)||null }); } catch(e) { res.status(500).json({ ok: false, error: e.message }); } });
 app.get('/api/status',     (req, res) => res.json({ ok: true, rooms: rooms.size, waiting: waitingPool.length, uptime: process.uptime() }));
 
