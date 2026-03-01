@@ -4,14 +4,15 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@400;500;600&display=swap');
 
+/* ─── ТЁМНАЯ ТЕМА (по умолчанию, везде) ─────────── */
 :root {
-  --bg:          var(--tg-theme-bg-color,            #111111);
-  --bg2:         var(--tg-theme-secondary-bg-color,  #1e1e1e);
-  --accent:      var(--tg-theme-button-color,        #e0e0e0);
-  --accent-text: var(--tg-theme-button-text-color,   #111);
-  --text:        var(--tg-theme-text-color,           #e8e8e8);
-  --hint:        var(--tg-theme-hint-color,           #666666);
-  --link:        var(--tg-theme-link-color,           #aaaaaa);
+  --bg:          #111111;
+  --bg2:         #1e1e1e;
+  --accent:      #e0e0e0;
+  --accent-text: #111111;
+  --text:        #e8e8e8;
+  --hint:        #666666;
+  --link:        #aaaaaa;
 
   --cell-empty:   #1c1c1c;
   --cell-ship:    #3d3d3d;
@@ -34,10 +35,19 @@
   --cell-size: calc((100vw - 24px - var(--label-size) - 20px) / 10);
 }
 
-/* ─── СВЕТЛАЯ ТЕМА (только через Telegram, авто) ────
-   На десктопе/браузере без TG — всегда тёмная тема.
-   Светлая применяется только когда TG явно передаёт colorScheme=light.  */
-body.theme-light {
+/* ─── TG ТЕМА: применяем переменные ТГ только внутри ТГ ── */
+body.tg-app {
+  --bg:          var(--tg-theme-bg-color,           #111111);
+  --bg2:         var(--tg-theme-secondary-bg-color, #1e1e1e);
+  --accent:      var(--tg-theme-button-color,        #e0e0e0);
+  --accent-text: var(--tg-theme-button-text-color,   #111111);
+  --text:        var(--tg-theme-text-color,           #e8e8e8);
+  --hint:        var(--tg-theme-hint-color,           #666666);
+  --link:        var(--tg-theme-link-color,           #aaaaaa);
+}
+
+/* ─── СВЕТЛАЯ ТЕМА (только в TG со светлой схемой) ── */
+body.tg-app.theme-light {
   --bg:          #f4f4f4;
   --bg2:         #e8e8e8;
   --accent:      #444444;

@@ -240,14 +240,13 @@ function initPromoBanner() {
   const bannerLb   = document.getElementById('tg-promo-lb');
   const bannerSt   = document.getElementById('tg-promo-stats');
   const isGuest    = !!App.user.isGuest;
+  const hintsOn    = App.settings.hints !== false;
 
-  // Баббл на главной: только гостям, только если не закрыт, только если hints=on
-  const showMenu = isGuest && !dismissed && (App.settings.hints !== false);
+  // Баббл на главной: гостям у кого hints включены и не закрыт
+  const showMenu = isGuest && hintsOn && !dismissed;
   if (bannerMenu) bannerMenu.classList.toggle('hidden', !showMenu);
-
-  // На лидерборде и статистике — просто показываем гостям (без крестика)
-  if (bannerLb) bannerLb.classList.toggle('hidden', !isGuest);
-  if (bannerSt) bannerSt.classList.toggle('hidden', !isGuest);
+  if (bannerLb)   bannerLb.classList.toggle('hidden', !isGuest);
+  if (bannerSt)   bannerSt.classList.toggle('hidden', !isGuest);
 
   document.getElementById('tg-promo-close')?.addEventListener('click', () => {
     saveJSON('bs_promo_dismissed', true);
@@ -319,9 +318,27 @@ function renderLeaderboardData(data) {
 }
 
 function renderStatsScreen() {
-  // Для гостей — показываем промо
+  const isGuest = !!App.user.isGuest;
   const bannerSt = document.getElementById('tg-promo-stats');
-  if (bannerSt) bannerSt.classList.toggle('hidden', !App.user.isGuest);
+  if (bannerSt) bannerSt.classList.toggle('hidden', !isGuest);
+
+  // Скрываем/показываем блоки статистики для гостей
+  const statsGrid    = document.querySelector('.stats-grid');
+  const statsProfile = document.querySelector('.stats-profile');
+  const sectionTitle = document.querySelector('.section-title');
+  const historyList  = document.getElementById('history-list');
+
+  if (isGuest) {
+    if (statsGrid)    statsGrid.style.display    = 'none';
+    if (statsProfile) statsProfile.style.display = 'none';
+    if (sectionTitle) sectionTitle.style.display = 'none';
+    if (historyList)  historyList.innerHTML = '';
+    return;
+  }
+
+  if (statsGrid)    statsGrid.style.display    = '';
+  if (statsProfile) statsProfile.style.display = '';
+  if (sectionTitle) sectionTitle.style.display = '';
 
   const s = App.stats, total = s.wins + s.losses + s.draws;
   setHTML('stats-avatar', (App.user.name[0]||'?').toUpperCase());
@@ -330,17 +347,17 @@ function renderStatsScreen() {
   setText('st-total', total);
   setText('st-acc',     s.totalShots ? Math.round(s.totalHits/s.totalShots*100)+'%' : '0%');
   setText('st-winrate', total        ? Math.round(s.wins/total*100)+'%' : '0%');
-  const hl = document.getElementById('history-list');
-  if (!hl) return;
-  hl.innerHTML = '';
-  if (!App.history.length) { hl.innerHTML = '<p class="empty-state">Нет боёв</p>'; return; }
+
+  if (!historyList) return;
+  historyList.innerHTML = '';
+  if (!App.history.length) { historyList.innerHTML = '<p class="empty-state">Нет боёв</p>'; return; }
   App.history.slice(0,20).forEach(h => {
     const div = document.createElement('div');
     div.className = 'history-item';
-    const icons = {win:'✅',loss:'❌',draw:'🤝'};
-    const labels = {win:'Победа',loss:'Поражение',draw:'Ничья'};
+    const icons  = {win:'✅', loss:'❌', draw:'🤝'};
+    const labels = {win:'Победа', loss:'Поражение', draw:'Ничья'};
     div.innerHTML = `<div class="history-icon">${icons[h.result]}</div><div class="history-info">${labels[h.result]} vs ${h.opponent}<span>${h.shots} выстрелов, ${h.hits} попаданий</span></div><div class="history-time">${new Date(h.date).toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'})}</div>`;
-    hl.appendChild(div);
+    historyList.appendChild(div);
   });
 }
 
@@ -736,7 +753,45 @@ function setShowingField(showEnemy) {
   document.getElementById('btn-show-mine')?.classList.toggle('active',  !showEnemy);
 }
 
-/* ─── ТАЙМЕР ХОДА ────────────────────────────────── */
+/* ─── ОБРАБОТКА СВОРАЧИВАНИЯ ПРИЛОЖЕНИЯ ─────────── */
+function initVisibilityHandler() {
+  let hiddenAt = null;
+  const MAX_BG_MS = 30 * 60 * 1000; // 30 минут — после этого сессия считается завершённой
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      hiddenAt = Date.now();
+    } else {
+      // Вернулись в приложение
+      const bgTime = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = null;
+
+      if (bgTime > MAX_BG_MS) {
+        // Слишком долго в фоне — сбрасываем в меню
+        if (Game.active) {
+          Game.active = false;
+          WS.disconnect();
+          showModal('Сессия истекла', 'Вы долго не были в игре. Вернитесь в меню.', [
+            { label: 'В меню', cls: 'btn-primary', action: () => { closeModal(); showScreen('menu'); }},
+          ]);
+        }
+        return;
+      }
+
+      // Переподключаем сокет если он отвалился во время фона
+      if (Game.active && Game.mode === 'online' && WS.socket && !WS.socket.connected) {
+        // Сокет отвалился — для игрока это означает что соперник уже получил победу
+        // Показываем соответствующий экран
+        Game.active = false;
+        showModal('Соединение потеряно', 'Игра прервана из-за потери связи.', [
+          { label: 'В меню', cls: 'btn-primary', action: () => { closeModal(); showScreen('menu'); }},
+        ]);
+      }
+    }
+  });
+}
+
+
 function startTurnWarningUI(secondsLeft) {
   clearTurnWarningUI();
   const statusEl = document.getElementById('game-status');
@@ -1363,19 +1418,23 @@ function initTelegram() {
     tg.setHeaderColor('secondary_bg_color');
     tg.enableClosingConfirmation();
 
-    // Fix 2: определяем светлую тему
-    const bg = tg.themeParams?.bg_color || tg.backgroundColor || '';
-    if (bg) {
-      // Парсим hex и считаем яркость
-      const hex = bg.replace('#','');
-      const r = parseInt(hex.substr(0,2),16)||0;
-      const g = parseInt(hex.substr(2,2),16)||0;
-      const b = parseInt(hex.substr(4,2),16)||0;
-      const lum = (r*299 + g*587 + b*114) / 1000;
-      if (lum > 128) document.body.classList.add('theme-light');
+    // Помечаем что мы внутри TG — тогда CSS применяет TG-переменные
+    document.body.classList.add('tg-app');
+
+    // Светлая тема
+    if (tg.colorScheme === 'light') {
+      document.body.classList.add('theme-light');
+    } else {
+      // Дополнительная проверка по яркости bg
+      const bg = tg.themeParams?.bg_color || '';
+      if (bg) {
+        const hex = bg.replace('#','');
+        const r = parseInt(hex.substr(0,2),16)||0;
+        const g = parseInt(hex.substr(2,2),16)||0;
+        const b = parseInt(hex.substr(4,2),16)||0;
+        if ((r*299 + g*587 + b*114)/1000 > 128) document.body.classList.add('theme-light');
+      }
     }
-    // Также через colorScheme
-    if (tg.colorScheme === 'light') document.body.classList.add('theme-light');
   } catch(e) {}
 }
 
@@ -1513,6 +1572,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   initHeroGrid();
   initSoundButton();
   initBurger();
+  initVisibilityHandler();
   bindNav();
   updateMenuUI();
   initPromoBanner();
