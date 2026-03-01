@@ -338,11 +338,11 @@ const Placement = {
       wrap.dataset.id = ship.id;
       for (let i = 0; i < ship.size; i++) { const c = document.createElement('div'); c.className = 'ship-cell'; wrap.appendChild(c); }
       if (!ship.placed) {
-        wrap.addEventListener('click', (e) => { if (this._drag?._wasDrag) return; this.selectShip(ship.id); });
+        // Двойной тап — поворот
         wrap.addEventListener('touchend', (e) => this._handleDoubleTap(e, ship.id));
         wrap.addEventListener('dblclick', (e) => { e.preventDefault(); this.rotateSingleShip(ship.id); });
-        wrap.addEventListener('mousedown', (e) => this._startDrag(e, ship, wrap));
-        wrap.addEventListener('touchstart', (e) => this._startDragTouch(e, ship, wrap), { passive: false });
+        // Единый drag + tap через Pointer Events (работает везде включая TG WebApp)
+        wrap.addEventListener('pointerdown', (e) => this._startPointerDrag(e, ship, wrap));
       }
       dock.appendChild(wrap);
     });
@@ -364,54 +364,51 @@ const Placement = {
     else this._lastTap[id] = now;
   },
 
-  _startDrag(e, ship, el) {
-    if (e.button !== 0) return; e.preventDefault();
-    this._drag = { ship, el, _wasDrag: false };
-    this._drag._onMove = ev => this._moveDrag(ev.clientX, ev.clientY);
-    this._drag._onUp   = ev => this._endDrag(ev.clientX, ev.clientY);
-    document.addEventListener('mousemove', this._drag._onMove);
-    document.addEventListener('mouseup',   this._drag._onUp);
-    this.selectShip(ship.id);
-  },
-  _moveDrag(cx, cy) { if (!this._drag) return; this._drag._wasDrag = true; this._highlightCellUnder(cx, cy); },
-  _endDrag(cx, cy) {
-    if (!this._drag) return;
-    document.removeEventListener('mousemove', this._drag._onMove);
-    document.removeEventListener('mouseup',   this._drag._onUp);
-    this._tryPlaceAt(cx, cy); this._drag = null; this.clearPreview();
-  },
+  _startDrag(e, ship, el) {}, // legacy, не используется
+  _moveDrag(cx, cy) {},
+  _endDrag(cx, cy) {},
+  _startDragTouch(e, ship, el) {}, // legacy, не используется
 
-  _startDragTouch(e, ship, el) {
-    const t = e.touches[0];
-    const startX = t.clientX, startY = t.clientY;
-    this._drag = {
-      ship, el, startX, startY, _wasDrag: false,
-      _onMove: ev => {
-        const tt = ev.touches[0];
-        const dx = tt.clientX - startX, dy = tt.clientY - startY;
-        if (!this._drag._wasDrag && Math.hypot(dx, dy) > 6) {
-          this._drag._wasDrag = true;
-          this.selectShip(ship.id);
-        }
-        if (this._drag._wasDrag) {
-          ev.preventDefault(); // блокируем скролл только во время drag
-          this._highlightCellUnder(tt.clientX, tt.clientY);
-        }
-      },
-      _onEnd: ev => {
-        document.removeEventListener('touchmove', this._drag._onMove);
-        document.removeEventListener('touchend',  this._drag._onEnd);
-        if (this._drag._wasDrag) {
-          const tt = ev.changedTouches[0];
-          this._tryPlaceAt(tt.clientX, tt.clientY);
-        }
-        this._drag = null;
-        this.clearPreview();
-      },
+  // Единый обработчик drag через Pointer Events — работает на мышке, touch и в TG WebApp
+  _startPointerDrag(e, ship, el) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startX = e.clientX, startY = e.clientY;
+    this._drag = { ship, el, _wasDrag: false };
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!this._drag._wasDrag && Math.hypot(dx, dy) > 6) {
+        this._drag._wasDrag = true;
+        this.selectShip(ship.id);
+      }
+      if (this._drag._wasDrag) {
+        this._highlightCellUnder(ev.clientX, ev.clientY);
+      }
     };
-    // passive:false нужен чтобы preventDefault работал внутри
-    document.addEventListener('touchmove', this._drag._onMove, { passive: false });
-    document.addEventListener('touchend',  this._drag._onEnd,  { passive: true });
+
+    const onUp = (ev) => {
+      el.releasePointerCapture(e.pointerId);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup',   onUp);
+      document.removeEventListener('pointercancel', onUp);
+
+      if (this._drag._wasDrag) {
+        this._tryPlaceAt(ev.clientX, ev.clientY);
+      } else {
+        // Короткий тап — выбор корабля
+        this.selectShip(ship.id);
+      }
+      this._drag = null;
+      this.clearPreview();
+    };
+
+    // setPointerCapture позволяет получать события даже когда палец/мышь ушли с элемента
+    try { el.setPointerCapture(e.pointerId); } catch(_) {}
+    document.addEventListener('pointermove',   onMove);
+    document.addEventListener('pointerup',     onUp);
+    document.addEventListener('pointercancel', onUp);
   },
 
   _highlightCellUnder(cx, cy) {
@@ -603,6 +600,7 @@ function renderGameBoard() {
   // Поле врага (всегда рендерим)
   const enemyEl = document.getElementById('game-board');
   if (enemyEl) {
+    enemyEl.classList.add('enemy-board'); // для CSS — более приглушённые цвета
     const display = makeBoard();
     for (let r = 0; r < BOARD_SIZE; r++)
       for (let c = 0; c < BOARD_SIZE; c++) {
@@ -895,18 +893,17 @@ const WS = {
       const isMine = shooter === App.user.id;
 
       if (isMine) {
-        // Наш выстрел — обновляем карту выстрелов по врагу
         Game.shots++;
         if (hit) {
           Game.hits++;
-          Game.myShots[r][c] = sunk ? CELL_SUNK : CELL_HIT;
-          Sound.hit(); vibrate([30,10,30]);
+          Game.myShots[r][c] = CELL_HIT;
           if (sunk) {
-            // Сервер потопил — синхронизируем периметр локально
-            Game.myShots[r][c] = CELL_SUNK;
+            // Находим все клетки этого корабля (связные CELL_HIT) и помечаем CELL_SUNK
+            WS._sinkShipAt(Game.myShots, r, c);
             Sound.sunk(); vibrate([50,20,50,20,50]);
+          } else {
+            Sound.hit(); vibrate([30,10,30]);
           }
-          // Попадание — ход остаётся у нас
           Game.isMyTurn = true;
           if (!isDesktop()) setShowingField(true);
         } else {
@@ -916,15 +913,20 @@ const WS = {
           if (!isDesktop()) setShowingField(false);
         }
       } else {
-        // Выстрел соперника по нам
         if (hit) {
-          Game.myBoard[r][c]    = sunk ? CELL_SUNK : CELL_HIT;
-          Game.enemyShots[r][c] = Game.myBoard[r][c];
-          // Попадание — соперник продолжает, наш ход не меняется (мы ждём)
+          Game.myBoard[r][c]    = CELL_HIT;
+          Game.enemyShots[r][c] = CELL_HIT;
+          if (sunk) {
+            WS._sinkShipAt(Game.myBoard, r, c);
+            // синхронизируем enemyShots из myBoard
+            for (let rr = 0; rr < BOARD_SIZE; rr++)
+              for (let cc = 0; cc < BOARD_SIZE; cc++)
+                if (Game.myBoard[rr][cc] === CELL_SUNK || Game.myBoard[rr][cc] === CELL_MISS)
+                  Game.enemyShots[rr][cc] = Game.myBoard[rr][cc];
+          }
         } else {
           Game.myBoard[r][c]    = CELL_MISS;
           Game.enemyShots[r][c] = CELL_MISS;
-          // Промах соперника — наш ход
           Game.isMyTurn = true;
           if (!isDesktop()) setShowingField(true);
         }
@@ -964,6 +966,33 @@ const WS = {
 
   disconnect() {
     if (this.socket) { this.socket.disconnect(); this.socket = null; }
+  },
+
+  // Flood-fill: находим все клетки корабля (CELL_HIT), помечаем CELL_SUNK, заполняем периметр CELL_MISS
+  _sinkShipAt(board, startR, startC) {
+    const visited = new Set();
+    const stack   = [[startR, startC]];
+    const shipCells = [];
+    while (stack.length) {
+      const [r, c] = stack.pop();
+      const key = r + ',' + c;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      if (board[r]?.[c] === CELL_HIT) {
+        shipCells.push([r, c]);
+        for (const [nr, nc] of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]])
+          if (inBounds(nr, nc)) stack.push([nr, nc]);
+      }
+    }
+    // Помечаем все клетки корабля как потопленные
+    for (const [r, c] of shipCells) board[r][c] = CELL_SUNK;
+    // Заполняем периметр промахами
+    for (const [r, c] of shipCells)
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = r+dr, nc = c+dc;
+          if (inBounds(nr, nc) && board[nr][nc] === CELL_EMPTY) board[nr][nc] = CELL_MISS;
+        }
   },
 };
 
@@ -1156,7 +1185,17 @@ function bindNav() {
   });
 
   // Реванш
-  document.getElementById('btn-rematch')?.addEventListener('click', () => { Sound.click(); startPlacement(pendingGameMode || 'bot-medium'); });
+  document.getElementById('btn-rematch')?.addEventListener('click', () => {
+    Sound.click();
+    const mode = pendingGameMode || 'bot-medium';
+    if (mode === 'online') {
+      // Онлайн реванш — заново ищем соперника
+      WS.disconnect();
+      startOnline('random');
+    } else {
+      startPlacement(mode);
+    }
+  });
 
   // Копировать ссылку
   document.getElementById('btn-copy-link')?.addEventListener('click', () => {
