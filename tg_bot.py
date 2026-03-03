@@ -58,9 +58,9 @@ def share_and_play_buttons():
     """Две кнопки рядом: «Играть» и «Поделиться игрой»."""
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("⚓ Играть", web_app=WebAppInfo(url=WEBAPP_URL)),
+            InlineKeyboardButton("Играть", web_app=WebAppInfo(url=WEBAPP_URL)),
             InlineKeyboardButton(
-                "📤 Поделиться игрой",
+                "Поделиться игрой",
                 url=f"https://t.me/share/url?text={GAME_SHARE_TEXT}+{GAME_SHARE_URL}"
             ),
         ]
