@@ -708,13 +708,20 @@ const Placement = {
   },
 
   _createGhost(ship, sourceEl, cx, cy) {
-    const ghost = sourceEl.cloneNode(true);
+    // Создаём ghost как набор клеток нужного размера (не клонируем исходный элемент)
+    const ghost = document.createElement('div');
+    ghost.className = 'ship-piece' + (this.vertical ? ' vertical' : '');
+    for (let i = 0; i < ship.size; i++) {
+      const c = document.createElement('div');
+      c.className = 'ship-cell';
+      ghost.appendChild(c);
+    }
     ghost.style.cssText = `
       position: fixed; z-index: 9999; pointer-events: none;
-      opacity: 0.75; transform: translate(-50%, -50%) scale(1.1);
-      transition: none; border-color: var(--accent);
-      border-style: dashed; border-width: 2px;
-      background: var(--bg2); border-radius: 5px; padding: 5px;
+      opacity: 0.6; transform: translate(-50%, -50%);
+      transition: none;
+      border-color: var(--accent); border-style: solid; border-width: 2px;
+      background: var(--bg2); border-radius: 5px; padding: 4px;
     `;
     ghost.style.left = cx + 'px';
     ghost.style.top  = cy + 'px';
@@ -739,11 +746,16 @@ const Placement = {
     this.clearPreview();
     if (!this.selected) return;
     const rc = this._getCellFromPoint(cx, cy); if (!rc) return;
-    const { r, c } = rc;
-    const valid = canPlace(this.board, r, c, this.selected.size, this.vertical);
-    for (let i = 0; i < this.selected.size; i++) {
+    let { r, c } = rc;
+    const size = this.selected.size;
+    // Прижимаем к краю поля чтобы preview не уходил за границу
+    if (this.vertical) r = Math.min(r, BOARD_SIZE - size);
+    else               c = Math.min(c, BOARD_SIZE - size);
+    r = Math.max(0, r); c = Math.max(0, c);
+    const valid = canPlace(this.board, r, c, size, this.vertical);
+    for (let i = 0; i < size; i++) {
       const nr = this.vertical ? r+i : r, nc = this.vertical ? c : c+i;
-      if (!inBounds(nr,nc)) continue;
+      if (!inBounds(nr, nc)) continue;
       const cell = document.querySelector(`#placement-board [data-r="${nr}"][data-c="${nc}"]`);
       if (cell) cell.classList.add(valid ? 'preview' : 'invalid');
     }
@@ -752,8 +764,13 @@ const Placement = {
   _tryPlaceAt(cx, cy) {
     if (!this.selected) return;
     const rc = this._getCellFromPoint(cx, cy); if (!rc) return;
-    const { r, c } = rc;
-    if (!canPlace(this.board, r, c, this.selected.size, this.vertical)) { vibrate([20,10,20]); return; }
+    let { r, c } = rc;
+    const size = this.selected.size;
+    // Прижимаем к краю — корабль всегда помещается если это возможно
+    if (this.vertical) r = Math.min(r, BOARD_SIZE - size);
+    else               c = Math.min(c, BOARD_SIZE - size);
+    r = Math.max(0, r); c = Math.max(0, c);
+    if (!canPlace(this.board, r, c, size, this.vertical)) { vibrate([20,10,20]); return; }
     this._placeSelectedAt(r, c);
   },
 
@@ -792,42 +809,43 @@ const Placement = {
 
         const shipId = cellShipMap[r+','+c];
         if (shipId !== undefined) {
-          // Двойной тап/клик → поворот корабля на месте
           let lastTap = 0;
           let longPressTimer = null;
+          let dragStarted = false;
 
-          const handleDoubleTap = (e) => {
-            if (this._drag?._wasDrag) return;
-            const now = Date.now();
-            if (now - lastTap < 350) {
-              lastTap = 0;
-              e.preventDefault();
-              this._rotatePlacedShip(shipId);
-            } else { lastTap = now; }
-          };
-
-          // Долгое зажатие (500мс) → вернуть в dok
           cell.addEventListener('pointerdown', (e) => {
+            dragStarted = false;
+            // Запускаем drag — он сам обработает движение
+            const ship = this.ships.find(s => s.id === shipId);
+            if (ship && ship.placed) {
+              this._startPointerDragFromField(e, ship, cell, () => { dragStarted = true; });
+            }
+            // Долгое зажатие без движения → вернуть в dok
             longPressTimer = setTimeout(() => {
               longPressTimer = null;
-              this._removePlacedShip(shipId);
-              vibrate([30,15,30]);
-              Sound.click();
+              if (!dragStarted) {
+                this._removePlacedShip(shipId);
+                vibrate([30,15,30]);
+                Sound.click();
+              }
             }, 500);
           });
+
           cell.addEventListener('pointerup', (e) => {
             if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-            if (!this._drag?._wasDrag) { e.preventDefault(); handleDoubleTap(e); }
+            if (!dragStarted) {
+              // Двойной тап → поворот
+              const now = Date.now();
+              if (now - lastTap < 350) {
+                lastTap = 0;
+                e.preventDefault();
+                this._rotatePlacedShip(shipId);
+              } else { lastTap = now; }
+            }
           });
-          cell.addEventListener('pointercancel', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
-          cell.addEventListener('dblclick', (e) => { e.preventDefault(); this._rotatePlacedShip(shipId); });
 
-          // Перетаскивание уже размещённого корабля (чтобы переставить)
-          cell.addEventListener('pointerdown', (e) => {
-            // запускаем drag для размещённого корабля
-            const ship = this.ships.find(s => s.id === shipId);
-            if (!ship || !ship.placed) return;
-            this._startPointerDragFromField(e, ship, cell);
+          cell.addEventListener('pointercancel', () => {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
           });
         } else {
           cell.addEventListener('pointerup', (e) => { if (this._drag?._wasDrag) return; e.preventDefault(); this.handleCellClick(r, c); });
@@ -891,7 +909,7 @@ const Placement = {
   },
 
   // Drag уже размещённого корабля с поля
-  _startPointerDragFromField(e, ship, cell) {
+  _startPointerDragFromField(e, ship, cell, onDragStart) {
     e.preventDefault(); e.stopPropagation();
     const startX = e.clientX, startY = e.clientY;
     this._drag = { ship, el: cell, _wasDrag: false, _ghost: null };
@@ -900,6 +918,7 @@ const Placement = {
       const dx = ev.clientX - startX, dy = ev.clientY - startY;
       if (!this._drag._wasDrag && Math.hypot(dx, dy) > 8) {
         this._drag._wasDrag = true;
+        if (onDragStart) onDragStart();
         // Убираем корабль с поля
         ship.cells.forEach(({r, c}) => { this.board[r][c] = CELL_EMPTY; });
         ship.placed = false; ship.cells = [];
@@ -1335,12 +1354,16 @@ function botShoot() {
           if (Game.myBoard[rr][cc] === CELL_SUNK || Game.myBoard[rr][cc] === CELL_MISS)
             Game.enemyShots[rr][cc] = Game.myBoard[rr][cc];
       Game.botQueue = []; Game.botLastHit = null; Game.botDirection = null;
+      Sound.sunk(); vibrate([80, 30, 80]); // враг потопил мой корабль
+    } else {
+      Sound.hit(); vibrate([40]); // враг попал по моему кораблю
     }
 
     if (allSunk(Game.myShips)) { renderGameBoard(); endGame('loss'); return; }
     renderGameBoard();
     setTimeout(botShoot, 700 + Math.random()*500);
   } else {
+    Sound.miss(); vibrate([10]); // враг промахнулся — лёгкая вибрация
     Game.isMyTurn = true; updateGameStatus();
     if (!isDesktop() && App.settings.showEnemyMoves) setShowingField(true);
     renderGameBoard();
@@ -1505,6 +1528,7 @@ const WS = {
           if (!isDesktop() && App.settings.showEnemyMoves) setShowingField(false);
         }
       } else {
+        // Соперник стреляет по нашим кораблям — вибрация
         if (hit) {
           Game.myBoard[r][c]    = CELL_HIT;
           Game.enemyShots[r][c] = CELL_HIT;
@@ -1514,12 +1538,15 @@ const WS = {
               for (let cc = 0; cc < BOARD_SIZE; cc++)
                 if (Game.myBoard[rr][cc] === CELL_SUNK || Game.myBoard[rr][cc] === CELL_MISS)
                   Game.enemyShots[rr][cc] = Game.myBoard[rr][cc];
+            Sound.sunk(); vibrate([80, 30, 80]); // враг потопил наш корабль
+          } else {
+            Sound.hit(); vibrate([40]); // враг попал
           }
         } else {
           Game.myBoard[r][c]    = CELL_MISS;
           Game.enemyShots[r][c] = CELL_MISS;
           Game.isMyTurn = true;
-          // Переключаем обратно на поле врага только если включена настройка
+          Sound.miss(); vibrate([10]); // враг промахнулся
           if (!isDesktop() && App.settings.showEnemyMoves) setShowingField(true);
         }
       }
