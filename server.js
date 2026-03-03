@@ -28,7 +28,7 @@ const server = http.createServer(app);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// ВАЖНО: app.get('*') регистрируется В КОНЦЕ, после всех API-маршрутов
 
 const io = new Server(server, {
   cors: { origin: CORS_ORIGIN, methods: ['GET', 'POST'] },
@@ -505,6 +505,9 @@ app.post('/api/rating/join',  (req, res) => { try { res.json(joinRating(req.body
 app.post('/api/rating/leave', (req, res) => { try { res.json(leaveRating(req.body.id)); } catch(e) { res.status(500).json({ ok: false }); } });
 app.get('/api/stats/:id',  (req, res) => { try { res.json({ ok: true, data: getPlayerStats(req.params.id)||null }); } catch(e) { res.status(500).json({ ok: false, error: e.message }); } });
 app.get('/api/status',     (req, res) => res.json({ ok: true, rooms: rooms.size, waiting: waitingPool.length, uptime: process.uptime() }));
+
+// Фронтенд — обязательно В САМОМ КОНЦЕ, после всех API
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 server.listen(PORT, () => console.log(`\n🚢 http://localhost:${PORT}\n`));
 module.exports = { app, server };
