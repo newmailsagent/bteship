@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # ── КОНФИГ из переменных окружения ─────────────────
 BOT_TOKEN  = os.environ.get("BOT_TOKEN")
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://pobesedka.ru")
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://morskoy-boy.ru")
 
 GAME_SHARE_TEXT = "Приглашаю тебя поиграть в Морской бой со мной прямо в Telegram:"
 GAME_SHARE_URL  = "https://t.me/bteship_bot/bteship"  # или другая ссылка, если нужно
