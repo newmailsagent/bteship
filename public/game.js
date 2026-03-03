@@ -244,8 +244,9 @@ function initSettings() {
 function defaultStats() { return { wins:0, losses:0, totalShots:0, totalHits:0 }; }
 
 function initStats() {
-  App.stats   = loadJSON('bs_stats',   defaultStats());
-  App.history = loadJSON('bs_history', []);
+  // Только инициализируем дефолты в памяти — реальные данные придут с сервера
+  App.stats   = defaultStats();
+  App.history = [];
 }
 
 // Синхронизация статистики и истории с сервером
@@ -258,37 +259,51 @@ async function syncStatsFromServer() {
     ]);
     const statsJson = await statsRes.json();
     const histJson  = await histRes.json();
+
     if (statsJson.ok && statsJson.data) {
       App.stats.wins       = statsJson.data.wins        || 0;
       App.stats.losses     = statsJson.data.losses      || 0;
       App.stats.totalShots = statsJson.data.total_shots || 0;
       App.stats.totalHits  = statsJson.data.total_hits  || 0;
-      saveJSON('bs_stats', App.stats);
-      updateMenuStats(); // обновляем цифры в шапке главной
+      updateMenuStats();
     }
-    if (histJson.ok && Array.isArray(histJson.data) && histJson.data.length > 0) {
-      App.history = histJson.data.map(h => ({
-        result:   h.result,
-        opponent: h.opponent,
-        shots:    h.shots,
-        hits:     h.hits,
-        date:     h.date * 1000,
-      }));
-      saveJSON('bs_history', App.history);
+
+    if (histJson.ok && Array.isArray(histJson.data)) {
+      // Разовая миграция: если на сервере мало записей — заливаем локальные
+      const serverHistory = histJson.data;
+      const localHistory  = loadJSON('bs_history', []);
+      if (localHistory.length > serverHistory.length && !loadJSON('bs_history_uploaded_' + App.user.id, false)) {
+        for (const h of localHistory.slice(0, 30)) {
+          await fetch('/api/history', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ id: App.user.id, result: h.result, opponent: h.opponent||'?', shots: h.shots||0, hits: h.hits||0 }),
+          }).catch(() => {});
+        }
+        saveJSON('bs_history_uploaded_' + App.user.id, true);
+        // После загрузки тянем свежие данные
+        const r2 = await fetch('/api/history/' + App.user.id);
+        const j2 = await r2.json();
+        if (j2.ok && Array.isArray(j2.data)) {
+          App.history = j2.data.map(h => ({ result: h.result, opponent: h.opponent, shots: h.shots, hits: h.hits, date: h.date * 1000 }));
+        }
+      } else {
+        App.history = serverHistory.map(h => ({ result: h.result, opponent: h.opponent, shots: h.shots, hits: h.hits, date: h.date * 1000 }));
+      }
     }
   } catch(e) {}
 }
 
 function recordResult(result, shots, hits, oppName) {
-  if(result==='win') App.stats.wins++; else if(result==='loss') App.stats.losses++;
-  App.stats.totalShots += shots; App.stats.totalHits += hits;
-  saveJSON('bs_stats', App.stats);
-  App.history.unshift({ result, opponent: oppName || '?', shots, hits, date: Date.now() });
-  if (App.history.length > 50) App.history.pop();
-  saveJSON('bs_history', App.history);
+  // Обновляем локальный объект для мгновенного отображения
+  if (result === 'win')  App.stats.wins++;
+  else if (result === 'loss') App.stats.losses++;
+  App.stats.totalShots += shots;
+  App.stats.totalHits  += hits;
   updateMenuStats();
-  // Сохраняем на сервере и потом синхронизируем назад
+
   if (!App.user.isGuest) {
+    // Пишем на сервер и синхронизируем назад
     fetch('/api/history', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -444,8 +459,10 @@ function renderRatingList(data) {
   if (!list) return;
   const medals = ['gold','silver','bronze'];
   list.innerHTML = '';
-  if (!data.length) { list.innerHTML = '<p class="empty-state">Пока никто не участвует в рейтинге</p>'; return; }
-  data.forEach((entry, i) => {
+  // Показываем только тех у кого есть хотя бы 1 победа
+  const filtered = data.filter(e => (e.rated_wins || 0) >= 1);
+  if (!filtered.length) { list.innerHTML = '<p class="empty-state">Пока никто не набрал побед. Сыграй сетевой бой!</p>'; return; }
+  filtered.forEach((entry, i) => {
     const rw  = entry.rated_wins   || 0;
     const rl  = entry.rated_losses || 0;
     const rs  = entry.rated_shots  || 0;
@@ -498,26 +515,14 @@ async function renderStatsScreen() {
   }
   setText('stats-name', App.user.name);
 
-  // Fix 1: для TG-юзеров грузим статистику с сервера (одинакова на всех устройствах)
-  let wins = App.stats.wins, losses = App.stats.losses;
-  let totalShots = App.stats.totalShots, totalHits = App.stats.totalHits;
-  try {
-    const res  = await fetch('/api/stats/' + App.user.id);
-    const json = await res.json();
-    if (json.ok && json.data) {
-      wins       = json.data.wins        || 0;
-      losses     = json.data.losses      || 0;
-      totalShots = json.data.total_shots || 0;
-      totalHits  = json.data.total_hits  || 0;
-      // Синхронизируем локальный кеш
-      App.stats.wins        = wins;
-      App.stats.losses      = losses;
-      App.stats.totalShots  = totalShots;
-      App.stats.totalHits   = totalHits;
-      saveJSON('bs_stats', App.stats);
-      updateMenuStats();
-    }
-  } catch(e) {} // если нет сети — используем локальный кеш
+  // Берём данные из App.stats (уже синхронизированы с сервером при старте)
+  // Обновляем на месте чтобы показать самые свежие данные
+  await syncStatsFromServer();
+
+  const wins       = App.stats.wins;
+  const losses     = App.stats.losses;
+  const totalShots = App.stats.totalShots;
+  const totalHits  = App.stats.totalHits;
 
   const total = wins + losses;
   setText('st-wins',    String(wins));
@@ -526,7 +531,7 @@ async function renderStatsScreen() {
   setText('st-acc',     totalShots ? Math.round(totalHits/totalShots*100)+'%' : '0%');
   setText('st-winrate', total      ? Math.round(wins/total*100)+'%' : '0%');
 
-  // История — с сервера (если TG-юзер) или локальная
+  // История — всегда с сервера (App.history заполняется в syncStatsFromServer)
   if (!historyList) return;
   historyList.innerHTML = '';
   const histToShow = App.history.slice(0, 30);
