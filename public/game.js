@@ -244,49 +244,48 @@ function initSettings() {
 function defaultStats() { return { wins:0, losses:0, totalShots:0, totalHits:0 }; }
 
 function initStats() {
-  // Только инициализируем дефолты в памяти — реальные данные придут с сервера
-  App.stats   = defaultStats();
-  App.history = [];
+  App.stats      = defaultStats(); // онлайн-статистика — с сервера
+  App.statsBots  = loadJSON('bs_stats_bots', defaultStats()); // бот-статистика — localStorage
+  App.history    = [];
+  App.historyBots = loadJSON('bs_history_bots', []);
 }
 
-// Синхронизация статистики и истории с сервером
+// Синхронизация онлайн-статистики с сервером
 async function syncStatsFromServer() {
   if (App.user.isGuest) return;
   try {
     const [statsRes, histRes] = await Promise.all([
       fetch('/api/stats/' + App.user.id),
-      fetch('/api/history/' + App.user.id),
+      fetch('/api/history/' + App.user.id + '?mode=online'),
     ]);
     const statsJson = await statsRes.json();
     const histJson  = await histRes.json();
 
     if (statsJson.ok && statsJson.data) {
-      App.stats.wins       = statsJson.data.wins        || 0;
-      App.stats.losses     = statsJson.data.losses      || 0;
-      App.stats.totalShots = statsJson.data.total_shots || 0;
-      App.stats.totalHits  = statsJson.data.total_hits  || 0;
+      // Показываем только онлайн-статистику (online_wins/losses)
+      App.stats.wins       = statsJson.data.online_wins   || 0;
+      App.stats.losses     = statsJson.data.online_losses || 0;
+      App.stats.totalShots = statsJson.data.online_shots  || 0;
+      App.stats.totalHits  = statsJson.data.online_hits   || 0;
       updateMenuStats();
     }
 
     if (histJson.ok && Array.isArray(histJson.data)) {
-      // Разовая миграция: если на сервере мало записей — заливаем локальные
       const serverHistory = histJson.data;
-      const localHistory  = loadJSON('bs_history', []);
-      if (localHistory.length > serverHistory.length && !loadJSON('bs_history_uploaded_' + App.user.id, false)) {
-        for (const h of localHistory.slice(0, 30)) {
+      const localOnlineHistory = loadJSON('bs_history_online_backup', []);
+      // Разовая миграция локальной истории
+      if (localOnlineHistory.length > serverHistory.length && !loadJSON('bs_history_uploaded_' + App.user.id, false)) {
+        for (const h of localOnlineHistory.slice(0, 30)) {
           await fetch('/api/history', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ id: App.user.id, result: h.result, opponent: h.opponent||'?', shots: h.shots||0, hits: h.hits||0 }),
+            body: JSON.stringify({ id: App.user.id, result: h.result, opponent: h.opponent||'?', shots: h.shots||0, hits: h.hits||0, skipStats: true, mode: 'online' }),
           }).catch(() => {});
         }
         saveJSON('bs_history_uploaded_' + App.user.id, true);
-        // После загрузки тянем свежие данные
-        const r2 = await fetch('/api/history/' + App.user.id);
+        const r2 = await fetch('/api/history/' + App.user.id + '?mode=online');
         const j2 = await r2.json();
-        if (j2.ok && Array.isArray(j2.data)) {
-          App.history = j2.data.map(h => ({ result: h.result, opponent: h.opponent, shots: h.shots, hits: h.hits, date: h.date * 1000 }));
-        }
+        if (j2.ok) App.history = j2.data.map(h => ({ result: h.result, opponent: h.opponent, shots: h.shots, hits: h.hits, date: h.date * 1000 }));
       } else {
         App.history = serverHistory.map(h => ({ result: h.result, opponent: h.opponent, shots: h.shots, hits: h.hits, date: h.date * 1000 }));
       }
@@ -295,21 +294,34 @@ async function syncStatsFromServer() {
 }
 
 function recordResult(result, shots, hits, oppName) {
-  // Обновляем локальный объект для мгновенного отображения
-  if (result === 'win')  App.stats.wins++;
-  else if (result === 'loss') App.stats.losses++;
-  App.stats.totalShots += shots;
-  App.stats.totalHits  += hits;
-  updateMenuStats();
+  const isBot = Game.mode?.startsWith('bot');
 
-  if (!App.user.isGuest) {
-    // Пишем на сервер и синхронизируем назад
-    fetch('/api/history', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id: App.user.id, result, opponent: oppName || '?', shots, hits }),
-    }).then(() => syncStatsFromServer()).catch(() => {});
+  if (isBot) {
+    // Бот-статистика — только localStorage
+    if (result === 'win')  App.statsBots.wins++;
+    else if (result === 'loss') App.statsBots.losses++;
+    App.statsBots.totalShots += shots;
+    App.statsBots.totalHits  += hits;
+    saveJSON('bs_stats_bots', App.statsBots);
+    App.historyBots.unshift({ result, opponent: oppName || 'Бот', shots, hits, date: Date.now() });
+    if (App.historyBots.length > 50) App.historyBots.pop();
+    saveJSON('bs_history_bots', App.historyBots);
+  } else {
+    // Онлайн-статистика — обновляем локально сразу
+    App.stats.wins       += result === 'win'  ? 1 : 0;
+    App.stats.losses     += result === 'loss' ? 1 : 0;
+    App.stats.totalShots += shots;
+    App.stats.totalHits  += hits;
+    // Пишем на сервер (skipStats=true — онлайн stats уже записаны через сокет)
+    if (!App.user.isGuest) {
+      fetch('/api/history', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ id: App.user.id, result, opponent: oppName || '?', shots, hits, skipStats: true, mode: 'online' }),
+      }).then(() => syncStatsFromServer()).catch(() => {});
+    }
   }
+  updateMenuStats();
 }
 
 function updateMenuStats() {
@@ -483,9 +495,11 @@ function renderRatingList(data) {
   });
 }
 
-async function renderStatsScreen() {
+async function renderStatsScreen(mode) {
   const isGuest = !!App.user.isGuest;
   updatePromoBanner();
+  if (!mode) mode = App._statsMode || 'online';
+  App._statsMode = mode;
 
   const statsGrid    = document.querySelector('.stats-grid');
   const statsProfile = document.querySelector('.stats-profile');
@@ -515,14 +529,43 @@ async function renderStatsScreen() {
   }
   setText('stats-name', App.user.name);
 
-  // Берём данные из App.stats (уже синхронизированы с сервером при старте)
-  // Обновляем на месте чтобы показать самые свежие данные
-  await syncStatsFromServer();
+  // Тумблер режима
+  let toggle = document.getElementById('stats-mode-toggle');
+  if (!toggle) {
+    const header = document.querySelector('#screen-stats .page-header');
+    if (header) {
+      toggle = document.createElement('div');
+      toggle.id = 'stats-mode-toggle';
+      toggle.className = 'stats-mode-toggle';
+      toggle.innerHTML =
+        '<button class="stm-btn" data-mode="online">По сети</button>' +
+        '<button class="stm-btn" data-mode="bot">Против ботов</button>';
+      header.appendChild(toggle);
+      toggle.addEventListener('click', e => {
+        const btn = e.target.closest('[data-mode]');
+        if (btn) renderStatsScreen(btn.dataset.mode);
+      });
+    }
+  }
+  // Подсвечиваем активный режим
+  document.querySelectorAll('.stm-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
 
-  const wins       = App.stats.wins;
-  const losses     = App.stats.losses;
-  const totalShots = App.stats.totalShots;
-  const totalHits  = App.stats.totalHits;
+  let wins, losses, totalShots, totalHits, histToShow;
+
+  if (mode === 'online') {
+    await syncStatsFromServer();
+    wins       = App.stats.wins;
+    losses     = App.stats.losses;
+    totalShots = App.stats.totalShots;
+    totalHits  = App.stats.totalHits;
+    histToShow = App.history;
+  } else {
+    wins       = App.statsBots.wins;
+    losses     = App.statsBots.losses;
+    totalShots = App.statsBots.totalShots;
+    totalHits  = App.statsBots.totalHits;
+    histToShow = App.historyBots;
+  }
 
   const total = wins + losses;
   setText('st-wins',    String(wins));
@@ -531,12 +574,11 @@ async function renderStatsScreen() {
   setText('st-acc',     totalShots ? Math.round(totalHits/totalShots*100)+'%' : '0%');
   setText('st-winrate', total      ? Math.round(wins/total*100)+'%' : '0%');
 
-  // История — всегда с сервера (App.history заполняется в syncStatsFromServer)
   if (!historyList) return;
   historyList.innerHTML = '';
-  const histToShow = App.history.slice(0, 30);
-  if (!histToShow.length) { historyList.innerHTML = '<p class="empty-state">Нет боёв</p>'; return; }
-  histToShow.forEach(h => {
+  const items = (histToShow || []).slice(0, 30);
+  if (!items.length) { historyList.innerHTML = '<p class="empty-state">Нет боёв</p>'; return; }
+  items.forEach(h => {
     const div = document.createElement('div');
     div.className = 'history-item';
     const icons  = {win:'✅', loss:'❌'};
@@ -544,6 +586,7 @@ async function renderStatsScreen() {
     const d = new Date(h.date);
     const dateStr = d.toLocaleDateString('ru',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'});
     div.innerHTML = `<div class="history-icon">${icons[h.result]||'🤝'}</div><div class="history-info">${labels[h.result]||'Ничья'} vs ${h.opponent}<span>${h.shots} выстрелов · ${h.hits} попаданий</span></div><div class="history-time">${dateStr}</div>`;
+    div.className = 'history-item';
     historyList.appendChild(div);
   });
 }

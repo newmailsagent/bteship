@@ -77,9 +77,11 @@ db.exec(`
     opponent   TEXT,
     shots      INTEGER DEFAULT 0,
     hits       INTEGER DEFAULT 0,
-    date       INTEGER DEFAULT (strftime('%s','now'))
+    date       INTEGER DEFAULT (strftime('%s','now')),
+    mode       TEXT DEFAULT 'online'
   );
 `);
+try { db.exec(`ALTER TABLE battle_history ADD COLUMN mode TEXT DEFAULT 'online'`); } catch(e) {}
 
 // Чистим гостей
 try { db.prepare(`DELETE FROM players WHERE id LIKE 'guest_%'`).run(); } catch(e) {}
@@ -138,15 +140,16 @@ function upsertPlayer(id, name) {
   `).run(id, name || 'Игрок');
 }
 
-function addBattleHistory(id, result, opponentName, shots, hits) {
+function addBattleHistory(id, result, opponentName, shots, hits, mode = 'online') {
   id = normalizeId(id);
   if (!id || id.startsWith('guest_')) return;
-  db.prepare(`INSERT INTO battle_history (player_id, result, opponent, shots, hits) VALUES (?,?,?,?,?)`)
-    .run(id, result, opponentName || '?', shots, hits);
+  db.prepare(`INSERT INTO battle_history (player_id, result, opponent, shots, hits, mode) VALUES (?,?,?,?,?,?)`)
+    .run(id, result, opponentName || '?', shots, hits, mode);
 }
 
-function getBattleHistory(id, limit = 30) {
+function getBattleHistory(id, limit = 30, mode = null) {
   id = normalizeId(id);
+  if (mode) return db.prepare(`SELECT * FROM battle_history WHERE player_id=? AND mode=? ORDER BY date DESC LIMIT ?`).all(id, mode, limit);
   return db.prepare(`SELECT * FROM battle_history WHERE player_id=? ORDER BY date DESC LIMIT ?`).all(id, limit);
 }
 
@@ -488,8 +491,24 @@ function checkSunkServer(field, hitR, hitC) {
 
 app.get('/api/config',     (req, res) => res.json({ botUsername: BOT_USERNAME }));
 app.get('/api/online',     (req, res) => res.json({ count: getOnlineCount() }));
-app.get('/api/history/:id',(req, res) => { try { res.json({ ok: true, data: getBattleHistory(req.params.id, 30) }); } catch(e) { res.status(500).json({ ok: false }); } });
-app.post('/api/history',   (req, res) => { try { const { id, result, opponent, shots, hits } = req.body; addBattleHistory(id, result, opponent, shots, hits); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); } });
+app.get('/api/history/:id',(req, res) => { try { const mode = req.query.mode || null; res.json({ ok: true, data: getBattleHistory(req.params.id, 30, mode) }); } catch(e) { res.status(500).json({ ok: false }); } });
+app.post('/api/history', (req, res) => {
+  try {
+    const { id, result, opponent, shots, hits, skipStats, mode } = req.body;
+    const cleanId = normalizeId(id);
+    if (!cleanId || cleanId.startsWith('guest_')) { res.json({ ok: false }); return; }
+    const gameMode = mode || 'online';
+    addBattleHistory(cleanId, result, opponent, shots, hits, gameMode);
+    if (!skipStats) {
+      if (result === 'win') {
+        db.prepare(`UPDATE players SET wins=wins+1, total_shots=total_shots+?, total_hits=total_hits+?, updated_at=strftime('%s','now') WHERE id=?`).run(shots || 0, hits || 0, cleanId);
+      } else if (result === 'loss') {
+        db.prepare(`UPDATE players SET losses=losses+1, total_shots=total_shots+?, total_hits=total_hits+?, updated_at=strftime('%s','now') WHERE id=?`).run(shots || 0, hits || 0, cleanId);
+      }
+    }
+    res.json({ ok: true });
+  } catch(e) { console.error('history post error:', e); res.status(500).json({ ok: false }); }
+});
 app.get('/api/ensure/:id', (req, res) => {
   try {
     const { id } = req.params;

@@ -569,7 +569,30 @@ body.theme-light .tg-promo-banner { border-color: rgba(0,0,0,.1); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 2px; }
 
-/* ─── ОНЛАЙН-СЧЁТЧИК (в шапке) ──────────────────── */
+/* ─── ТУМБЛЕР РЕЖИМА СТАТИСТИКИ ─────────────────── */
+.stats-mode-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--bg2);
+  border-radius: 8px;
+  padding: 3px;
+  margin-left: auto;
+}
+.stm-btn {
+  background: none;
+  border: none;
+  color: var(--hint);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.stm-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
 .online-counter {
   display: flex;
   align-items: center;
