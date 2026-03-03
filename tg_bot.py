@@ -79,10 +79,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             url=f"https://t.me/share/url?text={GAME_SHARE_TEXT}+{GAME_SHARE_URL}"
         )],
     ]
-    markup = InlineKeyboardMarkup([
-    [InlineKeyboardButton("⚓ Играть", web_app=WebAppInfo(url=WEBAPP_URL))],
-    share_button().inline_keyboard[0]  # или просто share_button()
-])
+    markup = share_and_play_buttons()
 
     await update.message.reply_text(
         f"Привет, {name}! ⚓\n\n"
