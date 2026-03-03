@@ -198,8 +198,10 @@ function initUser() {
   }
 
   if (tgUser) {
+    // Всегда целое число — TG иногда отдаёт float (364966070.0)
+    const cleanId = String(parseInt(tgUser.id, 10));
     App.user = {
-      id:       String(tgUser.id),
+      id:       cleanId,
       name:     tgUser.first_name || 'Игрок',
       username: tgUser.username ? '@' + tgUser.username : '',
       photo:    tgUser.photo_url || null,

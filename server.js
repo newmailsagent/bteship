@@ -84,14 +84,54 @@ db.exec(`
 // Чистим гостей
 try { db.prepare(`DELETE FROM players WHERE id LIKE 'guest_%'`).run(); } catch(e) {}
 
+// Миграция: нормализуем float-ID (364966070.0 → 364966070)
+try {
+  const floatPlayers = db.prepare(`SELECT * FROM players WHERE id LIKE '%.%'`).all();
+  for (const fp of floatPlayers) {
+    const normalId = String(parseInt(fp.id, 10));
+    const existing = db.prepare(`SELECT * FROM players WHERE id=?`).get(normalId);
+    if (existing) {
+      // Мержим статистику в правильную запись
+      db.prepare(`UPDATE players SET
+        wins=wins+?, losses=losses+?, total_shots=total_shots+?, total_hits=total_hits+?,
+        online_wins=online_wins+?, online_losses=online_losses+?,
+        online_shots=online_shots+?, online_hits=online_hits+?,
+        rated_wins=rated_wins+?, rated_losses=rated_losses+?,
+        rated_shots=rated_shots+?, rated_hits=rated_hits+?
+        WHERE id=?`).run(
+          fp.wins, fp.losses, fp.total_shots, fp.total_hits,
+          fp.online_wins, fp.online_losses, fp.online_shots, fp.online_hits,
+          fp.rated_wins, fp.rated_losses, fp.rated_shots, fp.rated_hits,
+          normalId
+        );
+      // Переносим историю
+      db.prepare(`UPDATE battle_history SET player_id=? WHERE player_id=?`).run(normalId, fp.id);
+    } else {
+      // Переименовываем запись
+      db.prepare(`UPDATE players SET id=? WHERE id=?`).run(normalId, fp.id);
+      db.prepare(`UPDATE battle_history SET player_id=? WHERE player_id=?`).run(normalId, fp.id);
+    }
+    db.prepare(`DELETE FROM players WHERE id=?`).run(fp.id);
+    console.log(`[DB] Merged player ${fp.id} → ${normalId}`);
+  }
+} catch(e) { console.error('[DB] Migration error:', e.message); }
+
 // Онлайн-игроки: socketId -> {playerId, name, connectedAt}
 const onlineSessions = new Map();
 
 function getOnlineCount() { return onlineSessions.size; }
 function broadcastOnlineCount() { io.emit('online_count', { count: getOnlineCount() }); }
 
+function normalizeId(id) {
+  if (!id || String(id).startsWith('guest_')) return id;
+  const n = String(id);
+  // Убираем дробную часть если есть (364966070.0 → 364966070)
+  return n.includes('.') ? String(parseInt(n, 10)) : n;
+}
+
 function upsertPlayer(id, name) {
-  if (id?.startsWith('guest_')) return;
+  id = normalizeId(id);
+  if (!id || id.startsWith('guest_')) return;
   db.prepare(`
     INSERT INTO players (id, name) VALUES (?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, updated_at=strftime('%s','now')
@@ -99,17 +139,20 @@ function upsertPlayer(id, name) {
 }
 
 function addBattleHistory(id, result, opponentName, shots, hits) {
-  if (id?.startsWith('guest_')) return;
+  id = normalizeId(id);
+  if (!id || id.startsWith('guest_')) return;
   db.prepare(`INSERT INTO battle_history (player_id, result, opponent, shots, hits) VALUES (?,?,?,?,?)`)
     .run(id, result, opponentName || '?', shots, hits);
 }
 
 function getBattleHistory(id, limit = 30) {
+  id = normalizeId(id);
   return db.prepare(`SELECT * FROM battle_history WHERE player_id=? ORDER BY date DESC LIMIT ?`).all(id, limit);
 }
 
 function addWin(id, shots, hits, isOnline = false) {
-  if (id?.startsWith('guest_')) return;
+  id = normalizeId(id);
+  if (!id || id.startsWith('guest_')) return;
   db.prepare(`UPDATE players SET wins=wins+1, total_shots=total_shots+?, total_hits=total_hits+?,
     updated_at=strftime('%s','now') WHERE id=?`).run(shots, hits, id);
   if (!isOnline) return;
@@ -123,7 +166,8 @@ function addWin(id, shots, hits, isOnline = false) {
 }
 
 function addLoss(id, shots, hits, isOnline = false) {
-  if (id?.startsWith('guest_')) return;
+  id = normalizeId(id);
+  if (!id || id.startsWith('guest_')) return;
   db.prepare(`UPDATE players SET losses=losses+1, total_shots=total_shots+?, total_hits=total_hits+?,
     updated_at=strftime('%s','now') WHERE id=?`).run(shots, hits, id);
   if (!isOnline) return;
@@ -161,7 +205,8 @@ function getRating() {
 
 // Вступить в рейтинг
 function joinRating(id) {
-  if (id?.startsWith('guest_')) return { ok: false };
+  id = normalizeId(id);
+  if (!id || id.startsWith('guest_')) return { ok: false };
   db.prepare(`UPDATE players SET rating_active=1, rating_since=strftime('%s','now'),
     rated_wins=0, rated_losses=0, rated_shots=0, rated_hits=0
     WHERE id=?`).run(id);
@@ -170,7 +215,8 @@ function joinRating(id) {
 
 // Покинуть рейтинг
 function leaveRating(id) {
-  if (id?.startsWith('guest_')) return { ok: false };
+  id = normalizeId(id);
+  if (!id || id.startsWith('guest_')) return { ok: false };
   db.prepare(`UPDATE players SET rating_active=0,
     rated_wins=0, rated_losses=0, rated_shots=0, rated_hits=0
     WHERE id=?`).run(id);
@@ -178,6 +224,7 @@ function leaveRating(id) {
 }
 
 function getPlayerStats(id) {
+  id = normalizeId(id);
   return db.prepare(`SELECT * FROM players WHERE id=?`).get(id);
 }
 
