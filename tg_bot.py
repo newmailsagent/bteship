@@ -13,7 +13,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ── НАСТРОЙКИ ──────────────────────────────────────
-BOT_TOKEN  = "ВСТАВЬ_СЮДА_ТОКЕН_ОТ_BOTFATHER"  # токен от @BotFather
+BOT_TOKEN  = "8743023199:AAF8BCdFl1Qc5bWngvB4t8bEym3gLSP6VWo"  # токен от @BotFather
 WEBAPP_URL = "https://pobesedka.ru"              # URL твоей игры
 
 logging.basicConfig(
