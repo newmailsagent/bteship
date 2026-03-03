@@ -591,7 +591,7 @@ body.theme-light .tg-promo-banner { border-color: rgba(0,0,0,.1); }
 }
 .stm-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: #111;
 }
 .online-counter {
   display: flex;
