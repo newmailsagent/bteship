@@ -994,13 +994,20 @@ const Placement = {
       if (!this._drag._wasDrag && Math.hypot(dx, dy) > 8) {
         this._drag._wasDrag = true;
         if (onDragStart) onDragStart();
-        // Снимаем с поля
-        ship.cells.forEach(({ r, c }) => { this.board[r][c] = CELL_EMPTY; });
+        // Снимаем с поля — только данные, НЕ перерисовываем DOM
+        ship.cells.forEach(({ r, c }) => {
+          this.board[r][c] = CELL_EMPTY;
+          // Скрываем ячейки корабля визуально без пересоздания DOM
+          const cellEl = document.querySelector(`#placement-board [data-r="${r}"][data-c="${c}"]`);
+          if (cellEl) { cellEl.classList.remove('ship'); cellEl.style.opacity = '0'; }
+        });
         ship.placed = false; ship.cells = [];
         this.selected = ship;
-        this.vertical = savedVertical; // сохраняем ориентацию корабля при перетаскивании
+        this.vertical = savedVertical;
         this._createGhost(ship, ev.clientX, ev.clientY);
-        this.renderBoard(); this.renderDock();
+        // renderDock нужен (добавляет корабль обратно визуально в dok если нужно),
+        // но НЕ renderBoard — чтобы не пересоздавать DOM и не терять pointer capture
+        this.renderDock();
       }
       if (this._drag._wasDrag) { this._moveGhost(ev.clientX, ev.clientY); this._highlightCellUnder(ev.clientX, ev.clientY); }
     };
@@ -1011,16 +1018,26 @@ const Placement = {
       document.removeEventListener('pointerup', onUp);
       document.removeEventListener('pointercancel', onUp);
       this._removeGhost(); this.clearPreview();
+
       if (this._drag?._wasDrag) {
         this._tryPlaceAt(ev.clientX, ev.clientY);
-        // Не удалось разместить — корабль возвращается в dok горизонтально
         if (!ship.placed) {
+          // Не удалось разместить — возвращаем в dok горизонтально
           ship.vertical = false;
           this.vertical = false;
           this.selected = null;
-          this.renderDock(); this.renderBoard();
+        }
+      } else {
+        // Не было drag — восстанавливаем невидимые ячейки
+        if (ship.placed) {
+          ship.cells.forEach(({ r, c }) => {
+            const cellEl = document.querySelector(`#placement-board [data-r="${r}"][data-c="${c}"]`);
+            if (cellEl) { cellEl.style.opacity = ''; }
+          });
         }
       }
+      // Теперь можно безопасно перерисовать
+      this.renderDock(); this.renderBoard();
       this._drag = null;
     };
 
