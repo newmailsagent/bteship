@@ -152,8 +152,8 @@ html, body {
 /* Hero-сетка занимает весь экран меню под шапкой */
 #screen-menu { position: relative; overflow: hidden; }
 
-/* Фоновая сетка — absolute на весь экран, не влияет на flow */
-.menu-hero {
+/* Фоновая сетка — абсолют на весь экран, не влияет на layout */
+.menu-hero-bg {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
   pointer-events: none;
@@ -173,7 +173,7 @@ html, body {
   position: relative;
   overflow: hidden;
 }
-/* Промах — точка по центру */
+/* Промах — точка */
 .hero-grid-cell.active::after {
   content: '';
   position: absolute; inset: 0; margin: auto;
@@ -181,42 +181,35 @@ html, body {
   background: var(--hint);
   border-radius: 50%;
 }
-/* Попадание — штриховка как на игровом поле */
-.hero-grid-cell.hit {
-  background: var(--cell-empty);
-  opacity: 1;
-}
+/* Попадание — штриховка как на поле */
+.hero-grid-cell.hit { background: var(--cell-empty); opacity: 1; }
 .hero-grid-cell.hit::after {
   content: '';
   position: absolute; inset: 0;
   background: repeating-linear-gradient(
-    45deg,
-    var(--red) 0px, var(--red) 2px,
+    45deg, var(--red) 0px, var(--red) 2px,
     transparent 2px, transparent 6px
   );
   opacity: .85;
 }
 
-/* Заголовок — в нормальном потоке, центрируется flex'ом родителя */
+/* Блок с заголовком — участвует в flex-потоке, как было раньше */
+.menu-hero {
+  position: relative; flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 160px;
+  z-index: 1; pointer-events: none;
+}
 .hero-title {
   font-family: var(--font-hd); font-size: clamp(26px,8vw,40px); font-weight: 900;
   letter-spacing: 4px; text-align: center; line-height: 1.15;
-  position: relative; z-index: 1; pointer-events: none;
 }
 
-/* Спейсер растягивается и центрирует заголовок, кнопки прибиты к низу */
-.menu-spacer {
-  flex: 1;
-  display: flex; align-items: center; justify-content: center;
-  position: relative; z-index: 1;
-}
-
+/* Nav — как было, только z-index чтобы быть поверх фона */
 .menu-nav {
-  padding: 16px 16px 32px;
+  padding: 0 16px 24px;
   display: flex; flex-direction: column; gap: 10px;
   position: relative; z-index: 2;
-  /* градиент чтобы кнопки читались поверх сетки */
-  background: linear-gradient(to bottom, transparent 0%, rgba(17,17,17,0.75) 25%, rgba(17,17,17,0.95) 100%);
 }
 
 /* Кнопка НОВАЯ ИГРА — матовое стекло */
