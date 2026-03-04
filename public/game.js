@@ -699,7 +699,11 @@ const PLACEMENT_SAVE_KEY = 'bs_last_placement';
 
 function savePlacement() {
   saveJSON(PLACEMENT_SAVE_KEY, {
-    ships: Placement.ships.map(s => ({ id: s.id, size: s.size, placed: s.placed, vertical: s.vertical, cells: s.cells.map(c => ({r:c.r,c:c.c})) })),
+    ships: Placement.ships.map(s => ({
+      id: s.id, size: s.size, placed: s.placed,
+      vertical: s.vertical,
+      cells: s.cells.map(c => ({ r: c.r, c: c.c })),
+    })),
     board: Placement.board,
   });
 }
@@ -721,179 +725,94 @@ function loadSavedPlacement() {
 }
 
 const Placement = {
-  board: null, ships: [], selected: null, vertical: false, _drag: null,
+  board: null,
+  ships: [],
+  selected: null,   // корабль выбранный для размещения (пришёл из дока)
+  vertical: false,  // ориентация при размещении из дока
+  _activeDrag: null, // { ship, pointerId, startX, startY, ghost }
 
   init(restoreSaved = true) {
-    this.board = makeBoard(); this.ships = []; this.selected = null; this.vertical = false; this._drag = null;
+    this.board = makeBoard();
+    this.ships = [];
+    this.selected = null;
+    this.vertical = false;
+    this._activeDrag = null;
     let id = 0;
     for (const def of SHIP_DEFS)
       for (let k = 0; k < def.count; k++)
         this.ships.push({ id: id++, size: def.size, placed: false, vertical: false, cells: [] });
     if (restoreSaved) loadSavedPlacement();
-    this.renderDock(); this.renderBoard();
+    this.renderDock();
+    this.renderBoard();
   },
 
+  // ── ДОК ─────────────────────────────────────────────
+  // Корабли статичны. Один тап — авторазмещение на поле.
   renderDock() {
     const dock = document.getElementById('ship-dock');
     if (!dock) return;
     dock.innerHTML = '';
     this.ships.forEach(ship => {
-      if (ship.placed) return;
       const wrap = document.createElement('div');
-      wrap.className = 'ship-piece'; // всегда горизонтально, без vertical класса
+      wrap.className = 'ship-piece' + (ship.placed ? ' placed' : '');
       wrap.dataset.id = ship.id;
-      for (let i = 0; i < ship.size; i++) { const c = document.createElement('div'); c.className = 'ship-cell'; wrap.appendChild(c); }
-      wrap.addEventListener('pointerdown', (e) => this._startDockDrag(e, ship, wrap));
+      for (let i = 0; i < ship.size; i++) {
+        const c = document.createElement('div'); c.className = 'ship-cell'; wrap.appendChild(c);
+      }
+      if (!ship.placed) {
+        wrap.addEventListener('pointerup', (e) => {
+          e.preventDefault();
+          this._autoPlace(ship);
+        });
+      }
       dock.appendChild(wrap);
     });
     const ready = document.getElementById('btn-ready');
     if (ready) ready.disabled = !this.allPlaced();
   },
 
-  _startDockDrag(e, ship, el) {
-    e.preventDefault(); e.stopPropagation();
-    const startX = e.clientX, startY = e.clientY;
-    const startTime = Date.now();
-    this._drag = { ship, _wasDrag: false, _ghost: null };
-
-    const onMove = (ev) => {
-      const dx = ev.clientX - startX, dy = ev.clientY - startY;
-      if (!this._drag._wasDrag && Math.hypot(dx, dy) > 8) {
-        this._drag._wasDrag = true;
-        this.selected = ship;
-        this._createGhost(ship, ev.clientX, ev.clientY);
-      }
-      if (this._drag._wasDrag) { this._moveGhost(ev.clientX, ev.clientY); this._highlightCellUnder(ev.clientX, ev.clientY); }
-    };
-    const onUp = (ev) => {
-      try { el.releasePointerCapture(e.pointerId); } catch(_) {}
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.removeEventListener('pointercancel', onUp);
-      this._removeGhost(); this.clearPreview();
-      if (this._drag._wasDrag) {
-        this._tryPlaceAt(ev.clientX, ev.clientY);
-      } else {
-        // Короткий тап — двойной тап меняет ориентацию для следующего размещения
-        const now = Date.now();
-        const last = el._lastTap || 0;
-        if (now - last < 350) {
-          this.vertical = !this.vertical;
-          vibrate([10]); Sound.click();
-          el._lastTap = 0;
-        } else {
-          el._lastTap = now;
+  // Авторазмещение: ищем первую свободную позицию
+  _autoPlace(ship) {
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        if (canPlace(this.board, r, c, ship.size, false)) {
+          ship.vertical = false;
+          ship.cells = placeShip(this.board, r, c, ship.size, false);
+          ship.placed = true;
+          Sound.place(); vibrate([15]);
+          this.renderDock();
+          this.renderBoard();
+          return;
         }
       }
-      this._drag = null;
-    };
-    try { el.setPointerCapture(e.pointerId); } catch(_) {}
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
-  },
-
-  _createGhost(ship, cx, cy) {
-    const ghost = document.createElement('div');
-    ghost.className = 'ship-piece' + (this.vertical ? ' vertical' : '');
-    for (let i = 0; i < ship.size; i++) { const c = document.createElement('div'); c.className = 'ship-cell'; ghost.appendChild(c); }
-    ghost.style.cssText = `position:fixed;z-index:9999;pointer-events:none;opacity:0.65;transform:translate(-50%,-50%);transition:none;border:2px solid var(--accent);background:var(--bg2);border-radius:5px;padding:4px;`;
-    ghost.style.left = cx + 'px'; ghost.style.top = cy + 'px';
-    document.body.appendChild(ghost);
-    if (this._drag) this._drag._ghost = ghost;
-  },
-
-  _moveGhost(cx, cy) { const g = this._drag?._ghost; if (!g) return; g.style.left = cx + 'px'; g.style.top = cy + 'px'; },
-  _removeGhost() { this._drag?._ghost?.remove(); if (this._drag) this._drag._ghost = null; },
-
-  _highlightCellUnder(cx, cy) {
-    this.clearPreview();
-    if (!this.selected) return;
-    const rc = this._getCellFromPoint(cx, cy); if (!rc) return;
-    let { r, c } = rc;
-    const size = this.selected.size;
-    if (this.vertical) r = Math.min(r, BOARD_SIZE - size); else c = Math.min(c, BOARD_SIZE - size);
-    r = Math.max(0, r); c = Math.max(0, c);
-    const valid = canPlace(this.board, r, c, size, this.vertical);
-    for (let i = 0; i < size; i++) {
-      const nr = this.vertical ? r+i : r, nc = this.vertical ? c : c+i;
-      if (!inBounds(nr, nc)) continue;
-      const cl = document.querySelector(`#placement-board [data-r="${nr}"][data-c="${nc}"]`);
-      if (cl) cl.classList.add(valid ? 'preview' : 'invalid');
     }
+    vibrate([20, 10, 20]);
   },
 
-  _tryPlaceAt(cx, cy) {
-    if (!this.selected) return;
-    const rc = this._getCellFromPoint(cx, cy); if (!rc) return;
-    let { r, c } = rc;
-    const size = this.selected.size;
-    if (this.vertical) r = Math.min(r, BOARD_SIZE - size); else c = Math.min(c, BOARD_SIZE - size);
-    r = Math.max(0, r); c = Math.max(0, c);
-    if (!canPlace(this.board, r, c, size, this.vertical)) { vibrate([20,10,20]); return; }
-    this._placeSelectedAt(r, c);
-  },
-
-  _getCellFromPoint(cx, cy) {
-    const el = document.elementFromPoint(cx, cy); if (!el) return null;
-    const cell = el.closest('[data-r][data-c]'); if (!cell) return null;
-    if (!document.getElementById('placement-board')?.contains(cell)) return null;
-    return { r: +cell.dataset.r, c: +cell.dataset.c };
-  },
-
-  _placeSelectedAt(r, c) {
-    if (!this.selected) return;
-    this.selected.vertical = this.vertical;
-    this.selected.cells = placeShip(this.board, r, c, this.selected.size, this.vertical);
-    this.selected.placed = true;
-    this.selected = null;
-    Sound.place(); vibrate([15]); this.renderDock(); this.renderBoard();
-  },
-
+  // ── ПОЛЕ ─────────────────────────────────────────────
   renderBoard() {
     const boardEl = document.getElementById('placement-board');
     if (!boardEl) return;
     boardEl.innerHTML = '';
+
+    // cellShipMap: 'r,c' → shipId
     const cellShipMap = {};
-    this.ships.forEach(ship => { if (ship.placed) ship.cells.forEach(({ r, c }) => { cellShipMap[r+','+c] = ship.id; }); });
+    this.ships.forEach(ship => {
+      if (ship.placed) ship.cells.forEach(({ r, c }) => { cellShipMap[r + ',' + c] = ship.id; });
+    });
 
     for (let r = 0; r < BOARD_SIZE; r++) {
       for (let c = 0; c < BOARD_SIZE; c++) {
         const cell = document.createElement('div');
-        cell.className = 'cell'; cell.dataset.r = r; cell.dataset.c = c;
+        cell.className = 'cell';
+        cell.dataset.r = r;
+        cell.dataset.c = c;
         if (this.board[r][c] === CELL_SHIP) cell.classList.add('ship');
-        const shipId = cellShipMap[r+','+c];
+
+        const shipId = cellShipMap[r + ',' + c];
         if (shipId !== undefined) {
-          this._bindFieldCell(cell, shipId);
-        } else {
-          cell.addEventListener('pointerup', (e) => {
-            if (this._drag?._wasDrag) return;
-            e.preventDefault();
-            if (!this.selected) return;
-            let rr = r, cc = c;
-            if (this.vertical) rr = Math.min(rr, BOARD_SIZE - this.selected.size);
-            else cc = Math.min(cc, BOARD_SIZE - this.selected.size);
-            rr = Math.max(0, rr); cc = Math.max(0, cc);
-            if (!canPlace(this.board, rr, cc, this.selected.size, this.vertical)) { vibrate([20,10,20]); return; }
-            this._placeSelectedAt(rr, cc);
-          });
+          this._attachShipHandlers(cell, shipId);
         }
-        cell.addEventListener('mouseenter', () => {
-          if (this._drag?._wasDrag || !this.selected) return;
-          this.clearPreview();
-          let rr = r, cc = c;
-          if (this.vertical) rr = Math.min(rr, BOARD_SIZE - this.selected.size);
-          else cc = Math.min(cc, BOARD_SIZE - this.selected.size);
-          rr = Math.max(0, rr); cc = Math.max(0, cc);
-          const valid = canPlace(this.board, rr, cc, this.selected.size, this.vertical);
-          for (let i = 0; i < this.selected.size; i++) {
-            const nr = this.vertical ? rr+i : rr, nc = this.vertical ? cc : cc+i;
-            if (!inBounds(nr, nc)) continue;
-            const cl = document.querySelector(`#placement-board [data-r="${nr}"][data-c="${nc}"]`);
-            if (cl) cl.classList.add(valid ? 'preview' : 'invalid');
-          }
-        });
-        cell.addEventListener('mouseleave', () => { if (!this._drag?._wasDrag) this.clearPreview(); });
         boardEl.appendChild(cell);
       }
     }
@@ -901,70 +820,211 @@ const Placement = {
     if (ready) ready.disabled = !this.allPlaced();
   },
 
-  _bindFieldCell(cell, shipId) {
-    let lastTap = 0;
-    let longPressTimer = null;
+  // Вешаем обработчики на каждую ячейку корабля на поле.
+  // Используем ТОЛЬКО события уровня cell (не document), чтобы
+  // renderBoard не убивал активные capture.
+  _attachShipHandlers(cell, shipId) {
+    let tapTime = 0;
+    let longTimer = null;
     let dragStarted = false;
-    let pointerMoved = false;
+    let dragX0 = 0, dragY0 = 0;
+    let ghost = null;
+
+    const cleanup = () => {
+      if (longTimer) { clearTimeout(longTimer); longTimer = null; }
+      if (ghost) { ghost.remove(); ghost = null; }
+      this.clearPreview();
+    };
 
     cell.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
       dragStarted = false;
-      pointerMoved = false;
-      const ship = this.ships.find(s => s.id === shipId);
-      if (!ship || !ship.placed) return;
+      dragX0 = e.clientX;
+      dragY0 = e.clientY;
+      cell.setPointerCapture(e.pointerId);
 
-      this._startFieldDrag(e, ship, cell,
-        // onDragStart: вызывается когда палец реально сдвинулся
-        () => {
-          dragStarted = true;
-          pointerMoved = true;
-          // Отменяем long-press — это drag, не удаление
-          if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-        }
-      );
-
-      // Long-press запускаем только если нет движения
-      longPressTimer = setTimeout(() => {
-        longPressTimer = null;
-        if (!dragStarted && !pointerMoved) {
-          this._removeShipFromField(shipId);
-          vibrate([30,15,30]); Sound.click();
+      // long-press → удалить
+      longTimer = setTimeout(() => {
+        longTimer = null;
+        if (!dragStarted) {
+          cleanup();
+          this._removeShip(shipId);
+          vibrate([30, 15, 30]);
+          Sound.click();
         }
       }, 600);
     });
 
-    cell.addEventListener('pointermove', () => { pointerMoved = true; });
+    cell.addEventListener('pointermove', (e) => {
+      if (!e.buttons) return;
+      const dx = e.clientX - dragX0, dy = e.clientY - dragY0;
+      if (!dragStarted && Math.hypot(dx, dy) > 8) {
+        dragStarted = true;
+        if (longTimer) { clearTimeout(longTimer); longTimer = null; }
+
+        const ship = this.ships.find(s => s.id === shipId);
+        if (!ship) return;
+
+        // Убираем с поля (данные)
+        ship.cells.forEach(({ r, c }) => { this.board[r][c] = CELL_EMPTY; });
+        ship.placed = false;
+        ship.cells = [];
+        this.selected = ship;
+        this.vertical = ship.vertical;
+
+        // Скрываем ячейки визуально
+        document.querySelectorAll('#placement-board .ship').forEach(el => {
+          if (el.dataset && this._cellBelongsTo(+el.dataset.r, +el.dataset.c, ship)) {
+            el.style.opacity = '0';
+          }
+        });
+        // На самом деле ship.cells уже пуст — просто скрываем саму нажатую cell
+        // (остальные уже без класса ship после board update)
+        // Создаём ghost
+        ghost = this._makeGhost(ship);
+        this._moveGhostTo(ghost, e.clientX, e.clientY);
+        document.body.appendChild(ghost);
+
+        this.renderDock();
+        // НЕ вызываем renderBoard — сохраняем pointer capture
+        // Убираем класс ship с ячеек вручную
+        this._hideCellsOnBoard(ship);
+      }
+
+      if (dragStarted) {
+        if (ghost) this._moveGhostTo(ghost, e.clientX, e.clientY);
+        this._previewAt(e.clientX, e.clientY);
+      }
+    });
 
     cell.addEventListener('pointerup', (e) => {
-      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-      // Двойной тап = поворот (только если не был drag)
-      if (!dragStarted) {
+      cleanup();
+      if (dragStarted) {
+        dragStarted = false;
+        this._dropAt(e.clientX, e.clientY);
+        this.renderDock();
+        this.renderBoard();
+      } else {
+        // Короткий тап — двойной тап для поворота
         const now = Date.now();
-        if (now - lastTap < 350) {
-          lastTap = 0; e.preventDefault();
-          this._rotateFieldShip(shipId);
-        } else { lastTap = now; }
+        if (now - tapTime < 350) {
+          tapTime = 0;
+          this._rotateShip(shipId);
+        } else {
+          tapTime = now;
+        }
       }
-      dragStarted = false;
     });
 
     cell.addEventListener('pointercancel', () => {
-      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      cleanup();
       dragStarted = false;
+      const ship = this.ships.find(s => s.id === shipId);
+      // Если drag не завершился — восстанавливаем корабль
+      if (ship && !ship.placed && this.selected?.id === shipId) {
+        ship.vertical = false;
+        this.vertical = false;
+        this.selected = null;
+        this.renderDock();
+        this.renderBoard();
+      }
     });
   },
 
-  _removeShipFromField(shipId) {
+  _cellBelongsTo(r, c, ship) {
+    return ship.cells.some(sc => sc.r === r && sc.c === c);
+  },
+
+  _hideCellsOnBoard(ship) {
+    // После снятия корабля с поля убираем visual ship-class с его бывших ячеек
+    // (board уже обновлён, но DOM ещё старый)
+    ship.cells.forEach(({ r, c }) => {
+      const el = document.querySelector(`#placement-board [data-r="${r}"][data-c="${c}"]`);
+      if (el) { el.classList.remove('ship'); el.style.opacity = ''; }
+    });
+  },
+
+  _makeGhost(ship) {
+    const g = document.createElement('div');
+    g.className = 'ship-piece' + (ship.vertical ? ' vertical' : '');
+    g.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0.7;' +
+      'transform:translate(-50%,-50%);border:2px solid var(--accent);' +
+      'background:var(--bg2);border-radius:5px;padding:4px;';
+    for (let i = 0; i < ship.size; i++) {
+      const c = document.createElement('div'); c.className = 'ship-cell'; g.appendChild(c);
+    }
+    return g;
+  },
+
+  _moveGhostTo(ghost, cx, cy) {
+    ghost.style.left = cx + 'px';
+    ghost.style.top  = cy + 'px';
+  },
+
+  _previewAt(cx, cy) {
+    this.clearPreview();
+    if (!this.selected) return;
+    const rc = this._pointToCell(cx, cy); if (!rc) return;
+    let { r, c } = rc;
+    const size = this.selected.size;
+    if (this.vertical) r = Math.min(r, BOARD_SIZE - size);
+    else               c = Math.min(c, BOARD_SIZE - size);
+    r = Math.max(0, r); c = Math.max(0, c);
+    const valid = canPlace(this.board, r, c, size, this.vertical);
+    for (let i = 0; i < size; i++) {
+      const nr = this.vertical ? r + i : r, nc = this.vertical ? c : c + i;
+      if (!inBounds(nr, nc)) continue;
+      const el = document.querySelector(`#placement-board [data-r="${nr}"][data-c="${nc}"]`);
+      if (el) el.classList.add(valid ? 'preview' : 'invalid');
+    }
+  },
+
+  _dropAt(cx, cy) {
+    if (!this.selected) return;
+    const rc = this._pointToCell(cx, cy);
+    if (rc) {
+      let { r, c } = rc;
+      const size = this.selected.size;
+      if (this.vertical) r = Math.min(r, BOARD_SIZE - size);
+      else               c = Math.min(c, BOARD_SIZE - size);
+      r = Math.max(0, r); c = Math.max(0, c);
+      if (canPlace(this.board, r, c, size, this.vertical)) {
+        this.selected.vertical = this.vertical;
+        this.selected.cells = placeShip(this.board, r, c, size, this.vertical);
+        this.selected.placed = true;
+        Sound.place(); vibrate([15]);
+        this.selected = null;
+        return;
+      }
+    }
+    // Не удалось — возврат в dok
+    vibrate([20, 10, 20]);
+    if (this.selected) {
+      this.selected.placed = false;
+      this.selected.cells = [];
+      this.selected.vertical = false;
+      this.vertical = false;
+      this.selected = null;
+    }
+  },
+
+  _pointToCell(cx, cy) {
+    const el = document.elementFromPoint(cx, cy); if (!el) return null;
+    const cell = el.closest('[data-r][data-c]'); if (!cell) return null;
+    if (!document.getElementById('placement-board')?.contains(cell)) return null;
+    return { r: +cell.dataset.r, c: +cell.dataset.c };
+  },
+
+  _removeShip(shipId) {
     const ship = this.ships.find(s => s.id === shipId);
     if (!ship || !ship.placed) return;
     ship.cells.forEach(({ r, c }) => { this.board[r][c] = CELL_EMPTY; });
     ship.placed = false; ship.cells = []; ship.vertical = false;
     this.selected = null;
-    this.vertical = false; // сбрасываем глобальную ориентацию — следующий корабль горизонтальный
     this.renderDock(); this.renderBoard();
   },
 
-  _rotateFieldShip(shipId) {
+  _rotateShip(shipId) {
     const ship = this.ships.find(s => s.id === shipId);
     if (!ship || !ship.placed || !ship.cells.length) return;
     const newV = !ship.vertical;
@@ -972,97 +1032,45 @@ const Placement = {
     ship.cells.forEach(({ r, c }) => { this.board[r][c] = CELL_EMPTY; });
     const offsets = [[0,0],[0,1],[1,0],[0,-1],[-1,0],[1,1],[-1,-1],[1,-1],[-1,1]];
     for (const [dr, dc] of offsets) {
-      const nr = anchorR+dr, nc = anchorC+dc;
+      const nr = anchorR + dr, nc = anchorC + dc;
       if (inBounds(nr, nc) && canPlace(this.board, nr, nc, ship.size, newV)) {
         ship.cells = placeShip(this.board, nr, nc, ship.size, newV);
-        ship.vertical = newV; Sound.click(); vibrate([15]); this.renderBoard(); return;
+        ship.vertical = newV;
+        Sound.click(); vibrate([15]);
+        this.renderBoard(); return;
       }
     }
-    // Не удалось — возвращаем как было
+    // Не удалось — возвращаем
     ship.cells = placeShip(this.board, anchorR, anchorC, ship.size, ship.vertical);
-    vibrate([30,15,30,15,30]); this.renderBoard();
+    vibrate([30, 15, 30, 15, 30]);
+    this.renderBoard();
   },
 
-  _startFieldDrag(e, ship, cell, onDragStart) {
-    e.preventDefault(); e.stopPropagation();
-    const startX = e.clientX, startY = e.clientY;
-    this._drag = { ship, _wasDrag: false, _ghost: null };
-    const savedVertical = ship.vertical;
-
-    const onMove = (ev) => {
-      const dx = ev.clientX - startX, dy = ev.clientY - startY;
-      if (!this._drag._wasDrag && Math.hypot(dx, dy) > 8) {
-        this._drag._wasDrag = true;
-        if (onDragStart) onDragStart();
-        // Снимаем с поля — только данные, НЕ перерисовываем DOM
-        ship.cells.forEach(({ r, c }) => {
-          this.board[r][c] = CELL_EMPTY;
-          // Скрываем ячейки корабля визуально без пересоздания DOM
-          const cellEl = document.querySelector(`#placement-board [data-r="${r}"][data-c="${c}"]`);
-          if (cellEl) { cellEl.classList.remove('ship'); cellEl.style.opacity = '0'; }
-        });
-        ship.placed = false; ship.cells = [];
-        this.selected = ship;
-        this.vertical = savedVertical;
-        this._createGhost(ship, ev.clientX, ev.clientY);
-        // renderDock нужен (добавляет корабль обратно визуально в dok если нужно),
-        // но НЕ renderBoard — чтобы не пересоздавать DOM и не терять pointer capture
-        this.renderDock();
-      }
-      if (this._drag._wasDrag) { this._moveGhost(ev.clientX, ev.clientY); this._highlightCellUnder(ev.clientX, ev.clientY); }
-    };
-
-    const onUp = (ev) => {
-      try { cell.releasePointerCapture(e.pointerId); } catch(_) {}
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.removeEventListener('pointercancel', onUp);
-      this._removeGhost(); this.clearPreview();
-
-      if (this._drag?._wasDrag) {
-        this._tryPlaceAt(ev.clientX, ev.clientY);
-        if (!ship.placed) {
-          // Не удалось разместить — возвращаем в dok горизонтально
-          ship.vertical = false;
-          this.vertical = false;
-          this.selected = null;
-        }
-      } else {
-        // Не было drag — восстанавливаем невидимые ячейки
-        if (ship.placed) {
-          ship.cells.forEach(({ r, c }) => {
-            const cellEl = document.querySelector(`#placement-board [data-r="${r}"][data-c="${c}"]`);
-            if (cellEl) { cellEl.style.opacity = ''; }
-          });
-        }
-      }
-      // Теперь можно безопасно перерисовать
-      this.renderDock(); this.renderBoard();
-      this._drag = null;
-    };
-
-    try { cell.setPointerCapture(e.pointerId); } catch(_) {}
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
+  clearPreview() {
+    document.querySelectorAll('#placement-board .preview, #placement-board .invalid')
+      .forEach(c => c.classList.remove('preview', 'invalid'));
   },
-
-  clearPreview() { document.querySelectorAll('#placement-board .preview, #placement-board .invalid').forEach(c => c.classList.remove('preview','invalid')); },
 
   clear() {
     this.board = makeBoard();
     this.ships.forEach(s => { s.placed = false; s.cells = []; s.vertical = false; });
-    this.selected = null; this.vertical = false; this.renderDock(); this.renderBoard();
+    this.selected = null; this.vertical = false;
+    this.renderDock(); this.renderBoard();
   },
 
   randomize() {
     const { board, ships } = randomPlaceAll();
     this.board = board;
-    this.ships.forEach((s, i) => { s.placed = true; s.cells = ships[i]?.cells || []; s.vertical = ships[i]?.vertical || false; });
-    this.selected = null; Sound.place(); this.renderDock(); this.renderBoard();
+    this.ships.forEach((s, i) => {
+      s.placed = true;
+      s.cells = ships[i]?.cells || [];
+      s.vertical = ships[i]?.vertical || false;
+    });
+    this.selected = null; Sound.place();
+    this.renderDock(); this.renderBoard();
   },
 
-  allPlaced() { return this.ships.every(s => s.placed); },
+  allPlaced()     { return this.ships.every(s => s.placed); },
   getShipsForGame() { return this.ships.map(s => ({ cells: [...s.cells], sunk: false, size: s.size })); },
 };
 
