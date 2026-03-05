@@ -78,7 +78,7 @@ html, body {
     left: 50% !important;
     right: auto !important;
     transform: translateX(calc(-50% + 100vw)) !important;
-    width: 480px;
+    width: 760px;
   }
   .screen.active {
     transform: translateX(-50%) !important;
@@ -163,9 +163,24 @@ html, body {
 .stat-val { display: block; font-family: var(--font-hd); font-size: 18px; color: var(--accent); }
 .stat-lbl { font-size: 11px; color: var(--hint); text-transform: uppercase; letter-spacing: 1px; }
 
-.menu-hero { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 160px; overflow: hidden; }
-.hero-grid { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(10,1fr); grid-auto-rows: calc(100vw / 10); gap: 2px; opacity: .15; align-content: center; }
-.hero-grid-cell { background: var(--cell-empty); border-radius: 3px; transition: opacity .4s; position: relative; overflow: hidden; }
+.menu-hero {
+  position: relative; flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 160px; overflow: hidden;
+  container-type: size; container-name: hero;
+}
+.hero-grid {
+  position: absolute; inset: 0;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(10, min(10cqw, 10cqh));
+  gap: 2px; opacity: .15;
+  align-content: center;
+}
+.hero-grid-cell {
+  background: var(--cell-empty); border-radius: 3px;
+  transition: opacity .4s; position: relative; overflow: hidden;
+}
 /* Промах — точка */
 .hero-grid-cell.active::after { content: ''; position: absolute; inset: 0; margin: auto; width: 35%; height: 35%; background: var(--hint); border-radius: 50%; }
 /* Попадание — штриховка как на игровом поле */
