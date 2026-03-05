@@ -689,6 +689,25 @@ function buildLabels() {
 function initHeroGrid() {
   const grid = document.getElementById('hero-grid');
   if (!grid) return;
+
+  // Перемещаем grid в корень #screen-menu чтобы покрыть весь экран
+  const screenMenu = document.getElementById('screen-menu');
+  if (screenMenu) {
+    screenMenu.insertBefore(grid, screenMenu.firstChild);
+    // Растягиваем на весь экран меню
+    Object.assign(grid.style, {
+      position: 'absolute',
+      top: '0', left: '0', right: '0', bottom: '0',
+      width: '100%', height: '100%',
+      zIndex: '0',
+      gridTemplateRows: 'repeat(10, 1fr)',
+    });
+    // Остальные дети поверх
+    Array.from(screenMenu.children).forEach(el => {
+      if (el !== grid) el.style.position = 'relative', el.style.zIndex = '1';
+    });
+  }
+
   const cells = [];
   for (let i = 0; i < 100; i++) {
     const d = document.createElement('div');
