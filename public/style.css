@@ -166,6 +166,12 @@ html, body {
 /* ─── МЕНЮ ───────────────────────────────────────── */
 #screen-menu { position: relative; overflow: hidden; }
 
+#screen-menu { position: relative; overflow: hidden; }
+#screen-menu header { position: relative; z-index: 1; }
+/* Растягиваем пространство между header и nav */
+#screen-menu::after {
+  content: ''; flex: 1;
+}
 .menu-hero {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -195,11 +201,9 @@ html, body {
 }
 .hero-grid-cell.hit { background: var(--cell-empty); opacity: 1; }
 .hero-grid-cell.hit::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(45deg, var(--red) 0px, var(--red) 2px, transparent 2px, transparent 6px); opacity: .85; }
-.hero-title { display: none; }
+.hero-title { font-family: var(--font-hd); font-size: clamp(26px,8vw,40px); font-weight: 900; letter-spacing: 4px; text-align: center; line-height: 1.15; position: relative; z-index: 1; }
 
-#screen-menu { position: relative; overflow: hidden; }
-#screen-menu header { position: relative; z-index: 1; }
-.menu-nav { padding: 0 16px 24px; display: flex; flex-direction: column; gap: 10px; margin-top: auto; position: relative; z-index: 1; }
+.menu-nav { padding: 0 16px 24px; display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
 .btn-row { display: flex; gap: 10px; }
 .btn-row .btn { flex: 1; }
 
