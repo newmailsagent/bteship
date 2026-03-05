@@ -813,9 +813,8 @@ const Placement = {
       ship.placed = false; ship.cells = [];
       this.selected = ship;
 
-      // Ghost с правильной ориентацией
-      this._drag.ghost = this._makeGhost(ship, shipVertical);
-      document.body.appendChild(this._drag.ghost);
+      // Ghost не нужен — ориентир показывается preview на поле
+      this._drag.ghost = null;
 
       // renderBoard — убираем корабль с поля визуально
       this.renderBoard();
@@ -963,11 +962,7 @@ const Placement = {
   _showPreview(cx, cy) {
     this.clearPreview();
     if (!this.selected) return;
-    // Временно скрываем ghost чтобы elementFromPoint не упирался в него
-    const ghost = this._drag?.ghost;
-    if (ghost) ghost.style.display = 'none';
     const el = document.elementFromPoint(cx, cy);
-    if (ghost) ghost.style.display = '';
     if (!el) return;
     const cell = el.closest('[data-r][data-c]');
     if (!cell || !document.getElementById('placement-board')?.contains(cell)) return;
@@ -986,12 +981,7 @@ const Placement = {
   },
 
   _dropAt(cx, cy, ship) {
-    // Прячем ghost чтобы elementFromPoint нашёл ячейку под ним
-    const ghost = this._drag?.ghost;
-    if (ghost) ghost.style.display = 'none';
     const el = document.elementFromPoint(cx, cy);
-    if (ghost) ghost.style.display = '';
-
     const cell = el?.closest('[data-r][data-c]');
     const boardEl = document.getElementById('placement-board');
     if (cell && boardEl?.contains(cell)) {
