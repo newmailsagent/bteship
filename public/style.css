@@ -177,7 +177,7 @@ html, body {
   top: -100vh; bottom: -100vh; left: 0; right: 0;
   display: grid;
   grid-template-columns: repeat(10, 1fr);
-  grid-template-rows: repeat(10, 10vw);
+  grid-template-rows: repeat(20, 10vw);
   align-content: center;
   gap: 2px; opacity: .15;
   pointer-events: none;
