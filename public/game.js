@@ -757,25 +757,19 @@ const Placement = {
   _boardEventsAttached: false,
   _initBoardEvents() {
     if (this._boardEventsAttached) return;
-    this._boardEventsAttached = false; // сбрасываем чтобы повесить заново
     const boardEl = document.getElementById('placement-board');
     if (!boardEl) return;
-
     boardEl.addEventListener('pointerdown', (e) => this._onBoardDown(e));
-    boardEl.addEventListener('pointermove', (e) => this._onBoardMove(e));
-    boardEl.addEventListener('pointerup',   (e) => this._onBoardUp(e));
-    boardEl.addEventListener('pointercancel',(e) => this._onBoardCancel(e));
     this._boardEventsAttached = true;
   },
 
   _onBoardDown(e) {
-    // Найти корабль под пальцем
     const cell = e.target.closest('[data-r][data-c]'); if (!cell) return;
     const r = +cell.dataset.r, c = +cell.dataset.c;
     const ship = this._shipAtCell(r, c); if (!ship) return;
 
     e.preventDefault();
-    this._killDrag(); // страховка — убиваем любой висящий drag
+    this._killDrag();
 
     const longTimer = setTimeout(() => {
       if (this._drag && !this._drag.moved) {
@@ -785,18 +779,19 @@ const Placement = {
       }
     }, 600);
 
-    this._drag = {
-      ship,
-      ghost: null,
-      pointerId: e.pointerId,
-      tapTime: ship._lastTap || 0,
-      longTimer,
-      moved: false,
-      startX: e.clientX,
-      startY: e.clientY,
-    };
+    const onMove = (ev) => this._onBoardMove(ev);
+    const onUp   = (ev) => { this._onBoardUp(ev); document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); document.removeEventListener('pointercancel', onUp); };
 
-    try { document.getElementById('placement-board').setPointerCapture(e.pointerId); } catch(_) {}
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup',   onUp);
+    document.addEventListener('pointercancel', onUp);
+
+    this._drag = {
+      ship, ghost: null,
+      pointerId: e.pointerId,
+      longTimer, moved: false,
+      startX: e.clientX, startY: e.clientY,
+    };
   },
 
   _onBoardMove(e) {
@@ -840,7 +835,7 @@ const Placement = {
     if (drag.ghost) { drag.ghost.remove(); }
     this.clearPreview();
 
-    try { document.getElementById('placement-board').releasePointerCapture(drag.pointerId); } catch(_) {}
+    try { e.target.releasePointerCapture(drag.pointerId); } catch(_) {}
 
     if (drag.moved) {
       // Drop
