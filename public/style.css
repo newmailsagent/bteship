@@ -164,7 +164,7 @@ html, body {
 .stat-lbl { font-size: 11px; color: var(--hint); text-transform: uppercase; letter-spacing: 1px; }
 
 /* ─── МЕНЮ ───────────────────────────────────────── */
-#screen-menu { position: relative; overflow: hidden; }
+#screen-menu { position: relative; overflow: hidden; height: 100%; }
 
 .menu-hero {
   position: relative; flex: 1;
