@@ -169,14 +169,17 @@ html, body {
 .menu-hero {
   position: relative; flex: 1;
   display: flex; align-items: center; justify-content: center;
-  min-height: 160px; overflow: hidden;
+  min-height: 160px; overflow: visible;
   container-type: size; container-name: hero;
 }
 .hero-grid {
-  position: absolute; inset: 0;
+  position: absolute;
+  left: 0; right: 0;
+  top: -200vh; bottom: -200vh;
   display: grid;
   grid-template-columns: repeat(10, 1fr);
-  grid-template-rows: repeat(10, 1fr);
+  grid-template-rows: repeat(10, 10vw);
+  align-content: center;
   gap: 2px; opacity: .15;
   pointer-events: none;
 }
