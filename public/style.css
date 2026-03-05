@@ -167,15 +167,14 @@ html, body {
 #screen-menu { position: relative; overflow: hidden; }
 
 .menu-hero {
-  position: relative; flex: 1;
-  display: flex; align-items: center; justify-content: center;
-  min-height: 160px; overflow: visible;
-  container-type: size; container-name: hero;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
 }
 .hero-grid {
-  position: absolute;
-  left: 0; right: 0;
-  top: -200vh; bottom: -200vh;
+  position: absolute; inset: 0;
   display: grid;
   grid-template-columns: repeat(10, 1fr);
   grid-template-rows: repeat(10, 10vw);
@@ -196,8 +195,10 @@ html, body {
 }
 .hero-grid-cell.hit { background: var(--cell-empty); opacity: 1; }
 .hero-grid-cell.hit::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(45deg, var(--red) 0px, var(--red) 2px, transparent 2px, transparent 6px); opacity: .85; }
-.hero-title { font-family: var(--font-hd); font-size: clamp(26px,8vw,40px); font-weight: 900; letter-spacing: 4px; text-align: center; line-height: 1.15; position: relative; z-index: 1; margin: auto; }
+.hero-title { display: none; }
 
+#screen-menu { position: relative; overflow: hidden; }
+#screen-menu header { position: relative; z-index: 1; }
 .menu-nav { padding: 0 16px 24px; display: flex; flex-direction: column; gap: 10px; margin-top: auto; position: relative; z-index: 1; }
 .btn-row { display: flex; gap: 10px; }
 .btn-row .btn { flex: 1; }
