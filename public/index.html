@@ -291,7 +291,7 @@
   <!-- Блок для авторизованных -->
   <div id="profile-content-auth">
 
-    <!-- Шапка: аватар + имя + ранг -->
+    <!-- Шапка: аватар + имя + звание по центру -->
     <div class="profile-head">
       <div class="profile-avatar-wrap">
         <div class="profile-avatar-frame" id="profile-avatar-frame">
@@ -299,10 +299,8 @@
         </div>
         <div class="profile-level-tag" id="profile-level-tag">Ур. 1</div>
       </div>
-      <div class="profile-head-info">
-        <div class="profile-name" id="profile-name">Игрок</div>
-        <div class="profile-rank" id="profile-rank">Новобранец Неона</div>
-      </div>
+      <div class="profile-name" id="profile-name">Игрок</div>
+      <div class="profile-rank" id="profile-rank">Новобранец Неона</div>
     </div>
 
     <!-- Табы -->
@@ -355,7 +353,10 @@
         </div>
         <h3 class="section-title">Последние бои</h3>
         <div class="history-list" id="history-list"><p class="empty-state">Нет боёв</p></div>
-          </div>
+        <div class="btn-reset-wrap">
+          <button class="btn btn-danger" id="btn-reset-stats">Сбросить статистику</button>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -417,7 +418,6 @@
     <div class="setting-item"><span>Звуки</span><label class="toggle-switch"><input type="checkbox" id="setting-sound" checked/><span class="toggle-track"></span></label></div>
     <div class="setting-item mobile-only"><span>Вибрация</span><label class="toggle-switch"><input type="checkbox" id="setting-vibro" checked/><span class="toggle-track"></span></label></div>
     <div class="setting-item" id="hints-setting-item"><span>Подсказки (баббл)</span><label class="toggle-switch"><input type="checkbox" id="setting-hints" checked/><span class="toggle-track"></span></label></div>
-    <div class="btn-reset-wrap"><button class="btn btn-danger" id="btn-reset-stats">Сбросить статистику</button></div>
   </div>
 </div>
 

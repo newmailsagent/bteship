@@ -931,12 +931,7 @@ body.theme-light .tg-promo-banner { border-color: rgba(0,0,0,.1); }
 :root { --profile-px: 20px; }
 
 /* ── Шапка: аватарка слева, имя+звание справа ── */
-.profile-header-block {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 24px 20px 16px;
-}
+.profile-header-block { display: none; }
 .profile-avatar-wrap { position: relative; flex-shrink: 0; }
 .profile-avatar-frame {
   width: 72px; height: 72px; border-radius: 16px;
@@ -971,6 +966,21 @@ body.theme-light .tg-promo-banner { border-color: rgba(0,0,0,.1); }
 .level-frame-20,.level-frame-21,.level-frame-22,.level-frame-23,.level-frame-24 { border-color: #e53935; }
 .level-frame-25,.level-frame-26,.level-frame-27,.level-frame-28,.level-frame-29 { border-color: #f57f17; }
 .level-frame-30 { border-color: #ffd600; }
+
+/* Шапка профиля — центрированный блок */
+.profile-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 20px 24px;
+  gap: 6px;
+}
+.profile-head .profile-avatar-wrap {
+  margin-bottom: 6px;
+}
+.profile-head .profile-name { font-size: 20px; font-weight: 700; }
+.profile-head .profile-rank { font-size: 13px; color: var(--accent); font-weight: 600; }
 
 /* ── Вкладки — в стиле игры ── */
 .profile-tabs {
@@ -1076,7 +1086,7 @@ body.theme-light .tg-promo-banner { border-color: rgba(0,0,0,.1); }
 }
 #profile-stats-mode-toggle .stm-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg);  /* тёмный текст на красном фоне = цвет фона неактивной */
 }
 
 /* stats-grid с нормальными отступами */
