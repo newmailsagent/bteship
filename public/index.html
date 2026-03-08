@@ -53,11 +53,16 @@
     <button class="tg-promo-close" id="tg-promo-close">✕</button>
   </div>
   <header class="menu-header">
-    <div class="user-info">
-      <div class="avatar" id="user-avatar">?</div>
+    <div class="user-info" id="btn-open-profile" style="cursor:pointer">
+      <div class="avatar-wrap">
+        <div class="avatar" id="user-avatar">?</div>
+        <div class="level-badge" id="menu-level-badge">1</div>
+      </div>
       <div class="user-details">
-        <span class="username" id="user-name">Гость</span>
-        <span class="user-tag"  id="user-tag">@unknown</span>
+        <div class="user-name-row">
+          <span class="username" id="user-name">Гость</span>
+        </div>
+        <span class="user-rank" id="user-rank">Новобранец Неона</span>
       </div>
     </div>
     <div class="header-right">
@@ -238,10 +243,71 @@
       <div class="go-stat"><span id="go-hits">0</span><small>попаданий</small></div>
       <div class="go-stat"><span id="go-acc">0%</span><small>точность</small></div>
     </div>
+    <!-- XP прогресс -->
+    <div class="xp-reward-block hidden" id="xp-reward-block">
+      <div class="xp-gained" id="xp-gained">+0 XP</div>
+      <div class="xp-level-display">
+        <div class="xp-ring-wrap">
+          <svg class="xp-ring" viewBox="0 0 80 80">
+            <rect class="xp-ring-bg"   x="4" y="4" width="72" height="72" rx="14" ry="14"/>
+            <rect class="xp-ring-fill" id="xp-ring-fill" x="4" y="4" width="72" height="72" rx="14" ry="14"/>
+          </svg>
+          <div class="xp-ring-level" id="xp-ring-level">1</div>
+        </div>
+        <div class="xp-ring-info">
+          <div class="xp-ring-rank" id="xp-ring-rank">Новобранец Неона</div>
+          <div class="xp-progress-bar-wrap">
+            <div class="xp-progress-bar" id="xp-progress-bar" style="width:0%"></div>
+          </div>
+          <div class="xp-progress-text" id="xp-progress-text">0 / 1000 XP</div>
+        </div>
+      </div>
+      <div class="xp-levelup hidden" id="xp-levelup">⬆ УРОВЕНЬ ПОВЫШЕН!</div>
+    </div>
     <div class="btn-col">
       <div id="rematch-status" class="rematch-status hidden"></div>
       <button class="btn btn-primary btn-large" id="btn-rematch">Реванш</button>
       <button class="btn btn-secondary" id="btn-to-menu" data-screen="menu">← Главное меню</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ПРОФИЛЬ ИГРОКА -->
+<div id="screen-profile" class="screen">
+  <div class="page-header">
+    <button class="btn-back" data-screen="menu">← Назад</button>
+    <h2>Профиль</h2>
+  </div>
+  <div class="profile-inner">
+    <div class="profile-avatar-wrap">
+      <div class="profile-avatar-frame" id="profile-avatar-frame">
+        <div class="profile-avatar" id="profile-avatar">?</div>
+      </div>
+      <div class="profile-level-tag" id="profile-level-tag">Ур. 1</div>
+    </div>
+    <div class="profile-name" id="profile-name">Игрок</div>
+    <div class="profile-rank" id="profile-rank">Новобранец Неона</div>
+
+    <!-- Большой кольцевой прогресс уровня -->
+    <div class="profile-xp-section">
+      <div class="profile-ring-wrap">
+        <svg class="profile-ring" viewBox="0 0 120 120">
+          <rect class="profile-ring-bg"   x="6"  y="6"  width="108" height="108" rx="20" ry="20"/>
+          <rect class="profile-ring-fill" id="profile-ring-fill" x="6" y="6" width="108" height="108" rx="20" ry="20"/>
+        </svg>
+        <div class="profile-ring-level" id="profile-ring-level">1</div>
+      </div>
+      <div class="profile-xp-details">
+        <div class="profile-xp-label">Прогресс уровня</div>
+        <div class="profile-progress-wrap">
+          <div class="profile-progress-bar" id="profile-progress-bar" style="width:0%"></div>
+        </div>
+        <div class="profile-xp-nums">
+          <span id="profile-xp-current">0</span> / <span id="profile-xp-needed">1000</span> XP
+        </div>
+        <div class="profile-xp-total">Всего XP: <span id="profile-xp-total">0</span></div>
+      </div>
     </div>
   </div>
 </div>

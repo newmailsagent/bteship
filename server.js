@@ -68,6 +68,8 @@ try { db.exec(`ALTER TABLE players ADD COLUMN online_wins    INTEGER DEFAULT 0`)
 try { db.exec(`ALTER TABLE players ADD COLUMN online_losses  INTEGER DEFAULT 0`); } catch(e) {}
 try { db.exec(`ALTER TABLE players ADD COLUMN online_shots   INTEGER DEFAULT 0`); } catch(e) {}
 try { db.exec(`ALTER TABLE players ADD COLUMN online_hits    INTEGER DEFAULT 0`); } catch(e) {}
+// XP система
+try { db.exec(`ALTER TABLE players ADD COLUMN xp INTEGER DEFAULT 0`); } catch(e) {}
 
 // Таблица истории боёв
 db.exec(`
@@ -188,40 +190,120 @@ function getDuelStats(myId, opponentId) {
   return { myWins, theirWins };
 }
 
-function addWin(id, shots, hits, isOnline = false) {
-  id = normalizeId(id);
-  if (!id || id.startsWith('guest_')) return;
-  db.prepare(`UPDATE players SET wins=wins+1, total_shots=total_shots+?, total_hits=total_hits+?,
-    updated_at=strftime('%s','now') WHERE id=?`).run(shots, hits, id);
-  if (!isOnline) return;
-  db.prepare(`UPDATE players SET online_wins=online_wins+1,
-    online_shots=online_shots+?, online_hits=online_hits+? WHERE id=?`).run(shots, hits, id);
-  const p = db.prepare(`SELECT rating_active FROM players WHERE id=?`).get(id);
-  if (p?.rating_active === 1) {
-    db.prepare(`UPDATE players SET rated_wins=rated_wins+1,
-      rated_shots=rated_shots+?, rated_hits=rated_hits+? WHERE id=?`).run(shots, hits, id);
+
+/* ─── XP / УРОВНИ ───────────────────────────────────────────────────── */
+const XP_LEVELS = [0,1000,2250,3813,5766,8208,11260,15075,19844,25805,33256,
+  42570,54212,68765,86956,109695,138118,173647,218058,273572,342964,
+  429704,538129,673660,843074,1054841,1319550,1650437,2064045,2581055,3227318];
+
+const RANKS = [
+  { minLevel: 1,  name: 'Новобранец Неона' },
+  { minLevel: 5,  name: 'Хакер Дронов' },
+  { minLevel: 10, name: 'Неоновый Рейдер' },
+  { minLevel: 20, name: 'Квазарный Титан' },
+  { minLevel: 30, name: 'Абсолютный Доминайтор' },
+];
+
+function calcLevel(xp) {
+  xp = xp || 0;
+  let level = 1;
+  for (let i = 1; i < XP_LEVELS.length; i++) {
+    if (xp >= XP_LEVELS[i]) level = i + 1;
+    else break;
+  }
+  return Math.min(level, 30);
+}
+
+function calcRank(level) {
+  let rank = RANKS[0].name;
+  for (const r of RANKS) { if (level >= r.minLevel) rank = r.name; }
+  return rank;
+}
+
+function calcXpReward(result, sunkenCount, shots, hits) {
+  if (result === 'win') {
+    const acc = shots > 0 ? hits / shots : 0;
+    let accBonus = 0;
+    if (acc >= 0.50) accBonus = 500;
+    else if (acc >= 0.45) accBonus = 300;
+    else if (acc >= 0.40) accBonus = 150;
+    return 1000 + accBonus + 50 * (sunkenCount || 0);
+  } else {
+    // loss / сдача соперника
+    return Math.min(400, 300 + 10 * (sunkenCount || 0));
   }
 }
 
-function addLoss(id, shots, hits, isOnline = false) {
+function addXp(id, xpGain) {
   id = normalizeId(id);
-  if (!id || id.startsWith('guest_')) return;
+  if (!id || id.startsWith('guest_') || xpGain <= 0) return null;
+  const before = db.prepare(`SELECT xp FROM players WHERE id=?`).get(id);
+  if (!before) return null;
+  const xpBefore = before.xp || 0;
+  const xpAfter  = xpBefore + xpGain;
+  db.prepare(`UPDATE players SET xp=? WHERE id=?`).run(xpAfter, id);
+  const levelBefore = calcLevel(xpBefore);
+  const levelAfter  = calcLevel(xpAfter);
+  return { xpBefore, xpAfter, xpGain, levelBefore, levelAfter, levelUp: levelAfter > levelBefore };
+}
+
+function getXpInfo(id) {
+  id = normalizeId(id);
+  const p = db.prepare(`SELECT xp FROM players WHERE id=?`).get(id);
+  const xp = p?.xp || 0;
+  const level = calcLevel(xp);
+  const rank  = calcRank(level);
+  const xpForThis  = XP_LEVELS[level - 1] || 0;
+  const xpForNext  = XP_LEVELS[level]     || XP_LEVELS[XP_LEVELS.length - 1];
+  const xpInLevel  = xp - xpForThis;
+  const xpNeeded   = xpForNext - xpForThis;
+  return { xp, level, rank, xpInLevel, xpNeeded, xpForNext };
+}
+
+function addWin(id, shots, hits, isOnline = false, sunkenCount = 0) {
+  id = normalizeId(id);
+  if (!id || id.startsWith('guest_')) return null;
+  db.prepare(`UPDATE players SET wins=wins+1, total_shots=total_shots+?, total_hits=total_hits+?,
+    updated_at=strftime('%s','now') WHERE id=?`).run(shots, hits, id);
+  let xpResult = null;
+  if (isOnline) {
+    db.prepare(`UPDATE players SET online_wins=online_wins+1,
+      online_shots=online_shots+?, online_hits=online_hits+? WHERE id=?`).run(shots, hits, id);
+    const p = db.prepare(`SELECT rating_active FROM players WHERE id=?`).get(id);
+    if (p?.rating_active === 1) {
+      db.prepare(`UPDATE players SET rated_wins=rated_wins+1,
+        rated_shots=rated_shots+?, rated_hits=rated_hits+? WHERE id=?`).run(shots, hits, id);
+    }
+    const xpGain = calcXpReward('win', sunkenCount, shots, hits);
+    xpResult = addXp(id, xpGain);
+  }
+  return xpResult;
+}
+
+function addLoss(id, shots, hits, isOnline = false, sunkenCount = 0) {
+  id = normalizeId(id);
+  if (!id || id.startsWith('guest_')) return null;
   db.prepare(`UPDATE players SET losses=losses+1, total_shots=total_shots+?, total_hits=total_hits+?,
     updated_at=strftime('%s','now') WHERE id=?`).run(shots, hits, id);
-  if (!isOnline) return;
-  db.prepare(`UPDATE players SET online_losses=online_losses+1,
-    online_shots=online_shots+?, online_hits=online_hits+? WHERE id=?`).run(shots, hits, id);
-  const p = db.prepare(`SELECT rating_active FROM players WHERE id=?`).get(id);
-  if (p?.rating_active === 1) {
-    db.prepare(`UPDATE players SET rated_losses=rated_losses+1,
-      rated_shots=rated_shots+?, rated_hits=rated_hits+? WHERE id=?`).run(shots, hits, id);
+  let xpResult = null;
+  if (isOnline) {
+    db.prepare(`UPDATE players SET online_losses=online_losses+1,
+      online_shots=online_shots+?, online_hits=online_hits+? WHERE id=?`).run(shots, hits, id);
+    const p = db.prepare(`SELECT rating_active FROM players WHERE id=?`).get(id);
+    if (p?.rating_active === 1) {
+      db.prepare(`UPDATE players SET rated_losses=rated_losses+1,
+        rated_shots=rated_shots+?, rated_hits=rated_hits+? WHERE id=?`).run(shots, hits, id);
+    }
+    const xpGain = calcXpReward('loss', sunkenCount, shots, hits);
+    xpResult = addXp(id, xpGain);
   }
+  return xpResult;
 }
 
 // Рейтинг: только rated_ (матчи когда игрок участвовал), анти-бот фильтр
 function getRating() {
-  return db.prepare(`
-    SELECT id, name, rating_active,
+  const rows = db.prepare(`
+    SELECT id, name, rating_active, xp,
       rated_wins, rated_losses, rated_shots, rated_hits,
       online_wins, online_losses, online_shots, online_hits,
       CASE
@@ -239,6 +321,7 @@ function getRating() {
     ORDER BY rating_score DESC, rated_wins DESC
     LIMIT 50
   `).all();
+  return rows.map(r => ({ ...r, level: calcLevel(r.xp || 0), rank: calcRank(calcLevel(r.xp || 0)) }));
 }
 
 // Вступить в рейтинг
@@ -292,8 +375,10 @@ function getOpponent(room, socketId) {
   return null;
 }
 function notifyBothMatched(room) {
-  io.to(room.p1.socketId).emit('matched', { roomId: room.id, opponent: { playerId: room.p2.playerId, name: room.p2.name } });
-  io.to(room.p2.socketId).emit('matched', { roomId: room.id, opponent: { playerId: room.p1.playerId, name: room.p1.name } });
+  const xp1 = getXpInfo(room.p1.playerId);
+  const xp2 = getXpInfo(room.p2.playerId);
+  io.to(room.p1.socketId).emit('matched', { roomId: room.id, opponent: { playerId: room.p2.playerId, name: room.p2.name, level: xp2.level, rank: xp2.rank } });
+  io.to(room.p2.socketId).emit('matched', { roomId: room.id, opponent: { playerId: room.p1.playerId, name: room.p1.name, level: xp1.level, rank: xp1.rank } });
 }
 
 // п.6: запустить таймер хода для комнаты
@@ -451,9 +536,15 @@ io.on('connection', (socket) => {
 
     if (allGone) {
       room.over = true;
-      addWin(shooter.playerId,  shooter.shots, shooter.hits, true);
-      addLoss(target.playerId,  target.shots,  target.hits,  true);
+      // Потопленные корабли = все корабли цели (они все потоплены)
+      const shooterSunken = countSunkenShips(target.field);
+      const targetSunken  = countSunkenShips(shooter.field);
+      const winXp  = addWin( shooter.playerId, shooter.shots, shooter.hits, true, shooterSunken);
+      const lossXp = addLoss(target.playerId,  target.shots,  target.hits,  true, targetSunken);
       recordDuelResult(shooter.playerId, target.playerId);
+      // Отправляем XP каждому игроку
+      if (winXp  && shooter.socketId) io.to(shooter.socketId).emit('xp_reward', winXp);
+      if (lossXp && target.socketId)  io.to(target.socketId).emit('xp_reward', lossXp);
     } else {
       if (!hit) room.turn = target.playerId;
       // Запускаем таймер для следующего хода
@@ -472,8 +563,14 @@ io.on('connection', (socket) => {
     clearTurnTimer(room);
     io.to(winner.socketId).emit('opponent_surrendered');
     io.to(surrenderer.socketId).emit('surrender_confirmed');
-    addWin(winner.playerId,      winner.shots,      winner.hits,      true);
-    addLoss(surrenderer.playerId, surrenderer.shots, surrenderer.hits, true);
+    const winSurrField = getOpponent(room, socket.id)?.field;
+    const lossSurrField = surrenderer.field;
+    const wSunken = winSurrField ? countSunkenShips(winSurrField) : 0;
+    const lSunken = lossSurrField ? countSunkenShips(lossSurrField) : 0;
+    const winXp2  = addWin( winner.playerId,      winner.shots,      winner.hits,      true, wSunken);
+    const lossXp2 = addLoss(surrenderer.playerId, surrenderer.shots, surrenderer.hits, true, lSunken);
+    if (winXp2  && winner.socketId)      io.to(winner.socketId).emit('xp_reward', winXp2);
+    if (lossXp2 && surrenderer.socketId) io.to(surrenderer.socketId).emit('xp_reward', lossXp2);
     recordDuelResult(winner.playerId, surrenderer.playerId);
   });
 
@@ -595,6 +692,29 @@ function checkSunkServer(field, hitR, hitC) {
   return ship.length > 0 && ship.every(([r, c]) => field[r][c] === 2);
 }
 
+// Считаем количество потопленных кораблей в поле (клетки со значением 4, flood-fill группами)
+function countSunkenShips(field) {
+  const visited = new Set();
+  let count = 0;
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) {
+      if (field[r]?.[c] === 4 && !visited.has(r+','+c)) {
+        count++;
+        const stack = [[r, c]];
+        while (stack.length) {
+          const [cr, cc] = stack.pop();
+          const key = cr+','+cc;
+          if (visited.has(key)) continue;
+          visited.add(key);
+          for (const [nr, nc] of [[cr-1,cc],[cr+1,cc],[cr,cc-1],[cr,cc+1]])
+            if (nr>=0&&nr<10&&nc>=0&&nc<10&&field[nr]?.[nc]===4) stack.push([nr,nc]);
+        }
+      }
+    }
+  }
+  return count;
+}
+
 app.get('/api/config',     (req, res) => res.json({ botUsername: BOT_USERNAME, appName: APP_NAME }));
 app.get('/api/online',     (req, res) => res.json({ count: getOnlineCount() }));
 app.get('/api/history/:id',(req, res) => { try { const mode = req.query.mode || null; res.json({ ok: true, data: getBattleHistory(req.params.id, 30, mode) }); } catch(e) { res.status(500).json({ ok: false }); } });
@@ -628,7 +748,35 @@ app.get('/api/leaderboard',(req, res) => { try { res.json({ ok: true, data: getR
 app.get('/api/rating',    (req, res) => { try { res.json({ ok: true, data: getRating() }); } catch(e) { console.error('rating error:', e); res.status(500).json({ ok: false, error: e.message }); } });
 app.post('/api/rating/join',  (req, res) => { try { res.json(joinRating(req.body.id));  } catch(e) { res.status(500).json({ ok: false }); } });
 app.post('/api/rating/leave', (req, res) => { try { res.json(leaveRating(req.body.id)); } catch(e) { res.status(500).json({ ok: false }); } });
-app.get('/api/stats/:id',  (req, res) => { try { res.json({ ok: true, data: getPlayerStats(req.params.id)||null }); } catch(e) { res.status(500).json({ ok: false, error: e.message }); } });
+app.get('/api/stats/:id',  (req, res) => {
+  try {
+    const data = getPlayerStats(req.params.id) || null;
+    let xpInfo = null;
+    if (data) xpInfo = getXpInfo(req.params.id);
+    res.json({ ok: true, data: data ? { ...data, ...xpInfo } : null });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// XP профиль отдельным эндпоинтом
+app.get('/api/xp/:id', (req, res) => {
+  try {
+    const info = getXpInfo(req.params.id);
+    res.json({ ok: true, data: info });
+  } catch(e) { res.status(500).json({ ok: false }); }
+});
+
+// Получить уровень + звание для нескольких игроков (для рейтинга)
+app.post('/api/xp/batch', (req, res) => {
+  try {
+    const ids = req.body.ids || [];
+    const result = {};
+    for (const id of ids) {
+      const norm = normalizeId(id);
+      if (norm) result[norm] = getXpInfo(norm);
+    }
+    res.json({ ok: true, data: result });
+  } catch(e) { res.status(500).json({ ok: false }); }
+});
 app.get('/api/duel/:myId/:theirId', (req, res) => {
   try { res.json({ ok: true, data: getDuelStats(req.params.myId, req.params.theirId) }); }
   catch(e) { res.status(500).json({ ok: false }); }

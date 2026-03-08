@@ -15,6 +15,46 @@ const SHIP_DEFS  = [
 ];
 const CELL_EMPTY = 0, CELL_SHIP = 1, CELL_HIT = 2, CELL_MISS = 3, CELL_SUNK = 4;
 
+
+/* ─── XP / УРОВНИ (клиент) ──────────────────────── */
+const XP_LEVELS = [0,1000,2250,3813,5766,8208,11260,15075,19844,25805,33256,
+  42570,54212,68765,86956,109695,138118,173647,218058,273572,342964,
+  429704,538129,673660,843074,1054841,1319550,1650437,2064045,2581055,3227318];
+
+const RANKS = [
+  { minLevel: 1,  name: 'Новобранец Неона' },
+  { minLevel: 5,  name: 'Хакер Дронов' },
+  { minLevel: 10, name: 'Неоновый Рейдер' },
+  { minLevel: 20, name: 'Квазарный Титан' },
+  { minLevel: 30, name: 'Абсолютный Доминайтор' },
+];
+
+function calcLevel(xp) {
+  xp = xp || 0;
+  let level = 1;
+  for (let i = 1; i < XP_LEVELS.length; i++) {
+    if (xp >= XP_LEVELS[i]) level = i + 1; else break;
+  }
+  return Math.min(level, 30);
+}
+
+function calcRank(level) {
+  let rank = RANKS[0].name;
+  for (const r of RANKS) { if (level >= r.minLevel) rank = r.name; }
+  return rank;
+}
+
+function getXpProgress(xp) {
+  const level    = calcLevel(xp);
+  const rank     = calcRank(level);
+  const xpForThis = XP_LEVELS[level - 1] || 0;
+  const xpForNext = XP_LEVELS[level]     || XP_LEVELS[XP_LEVELS.length - 1];
+  const xpInLevel = xp - xpForThis;
+  const xpNeeded  = xpForNext - xpForThis;
+  const pct       = xpNeeded > 0 ? Math.min(100, Math.round(xpInLevel / xpNeeded * 100)) : 100;
+  return { xp, level, rank, xpInLevel, xpNeeded, xpForNext, pct };
+}
+
 /* ─── ПРИЛОЖЕНИЕ ─────────────────────────────────── */
 const App = {
   user:     null,
@@ -320,11 +360,16 @@ async function syncStatsFromServer() {
     const histJson  = await histRes.json();
 
     if (statsJson.ok && statsJson.data) {
-      // Показываем только онлайн-статистику (online_wins/losses)
       App.stats.wins       = statsJson.data.online_wins   || 0;
       App.stats.losses     = statsJson.data.online_losses || 0;
       App.stats.totalShots = statsJson.data.online_shots  || 0;
       App.stats.totalHits  = statsJson.data.online_hits   || 0;
+      // XP данные
+      if (statsJson.data.xp !== undefined) {
+        App.user.xp = statsJson.data.xp || 0;
+        saveJSON('bs_user', App.user);
+        updateMenuLevel();
+      }
       updateMenuStats();
     }
 
@@ -529,7 +574,6 @@ function renderRatingList(data) {
   if (!list) return;
   const medals = ['gold','silver','bronze'];
   list.innerHTML = '';
-  // Показываем только тех у кого есть хотя бы 1 победа
   const filtered = data.filter(e => (e.rated_wins || 0) >= 1);
   if (!filtered.length) { list.innerHTML = '<p class="empty-state">Пока никто не набрал побед. Сыграй сетевой бой!</p>'; return; }
   filtered.forEach((entry, i) => {
@@ -537,17 +581,19 @@ function renderRatingList(data) {
     const rl  = entry.rated_losses || 0;
     const rs  = entry.rated_shots  || 0;
     const rh  = entry.rated_hits   || 0;
-    const acc = rs > 0 ? Math.round(rh/rs*100) : 0;
     const tot = rw + rl;
     const wr  = tot ? Math.round(rw/tot*100) : 0;
     const isMe = entry.id === App.user?.id;
+    const level = entry.level || 1;
+    const rank  = entry.rank  || 'Новобранец Неона';
     const div  = document.createElement('div');
     div.className = 'lb-item' + (isMe ? ' lb-item-me' : '');
     div.innerHTML =
       '<div class="lb-rank ' + (medals[i]||'') + '">' + (i < 3 ? ['🥇','🥈','🥉'][i] : i+1) + '</div>' +
-      '<div class="lb-avatar">' + (entry.name||'?')[0].toUpperCase() + '</div>' +
+      '<div class="lb-avatar-wrap"><div class="lb-avatar">' + (entry.name||'?')[0].toUpperCase() + '</div>' +
+      '<div class="lb-level-dot level-bg-' + level + '">' + level + '</div></div>' +
       '<div class="lb-info"><strong>' + (entry.name||'Игрок') + (isMe ? ' <small>(вы)</small>' : '') + '</strong>' +
-      '<small>' + rw + 'W · ' + wr + '% WR</small></div>' +
+      '<small class="lb-rank-name">' + rank + ' · ' + rw + 'W · ' + wr + '% WR</small></div>' +
       '<div class="lb-wins">' + rw + '</div>';
     list.appendChild(div);
   });
@@ -1617,10 +1663,13 @@ function endGame(result) {
   if (result === 'loss') { Sound.lose(); vibrate([200]); }
   // Сбрасываем состояние реванша перед показом экрана
   Rematch._clear();
-  // Скрываем реванш для ботов — там не нужен WS-реванш
-  const rematchBtn = document.getElementById('btn-rematch');
-  if (rematchBtn) rematchBtn.style.display = Game.mode === 'online' ? '' : '';
-  setTimeout(() => showScreen('gameover'), 800);
+  setTimeout(() => {
+    showScreen('gameover');
+    // Показываем XP только для онлайн-боёв
+    if (Game.mode === 'online' && Game._pendingXp) {
+      setTimeout(() => { showXpReward(Game._pendingXp); Game._pendingXp = null; }, 300);
+    }
+  }, 800);
 }
 
 /* ─── WEBSOCKET ──────────────────────────────────── */
@@ -1705,7 +1754,7 @@ const WS = {
       stopSearchUI();
       this.roomId  = roomId;
       Game.roomId  = roomId;
-      Game.opponent = { name: opponent.name, id: opponent.playerId };
+      Game.opponent = { name: opponent.name, id: opponent.playerId, level: opponent.level || 1, rank: opponent.rank || '' };
       setText('waiting-title', `Соперник: ${opponent.name}`);
       setText('waiting-sub',   'Расставляй корабли!');
       const block = document.getElementById('invite-block');
@@ -1844,6 +1893,13 @@ const WS = {
     // Обновляем счётчик онлайна через основной сокет (без отдельного соединения)
     this.socket.on('online_count', ({ count }) => {
       document.querySelectorAll('.online-count-val').forEach(el => el.textContent = count);
+    });
+
+    // XP награда по итогам онлайн-боя
+    this.socket.on('xp_reward', (xpData) => {
+      Game._pendingXp = xpData;
+      // Применяем сразу если уже на экране gameover, иначе endGame подберёт
+      if (currentScreen === 'gameover') showXpReward(xpData);
     });
 
     // ── Реванш ───────────────────────────────────────
@@ -2219,15 +2275,132 @@ function initTelegram() {
 function updateMenuUI() {
   const isGuest = !!App.user.isGuest;
   setText('user-name', App.user.name);
-  setText('user-tag', App.user.username || (isGuest ? 'гость' : ''));
   const av = document.getElementById('user-avatar');
   if (av) {
     av.innerHTML = App.user.photo ? `<img src="${App.user.photo}" alt="" />` : (App.user.name[0]||'?').toUpperCase();
   }
-  // Fix 1: скрываем статистику в шапке для гостей
   const statsMini = document.querySelector('.stats-mini');
   if (statsMini) statsMini.style.display = isGuest ? 'none' : '';
+  updateMenuLevel();
   updateMenuStats();
+}
+
+function updateMenuLevel() {
+  const xp    = App.user.xp || 0;
+  const prog  = getXpProgress(xp);
+  setText('menu-level-badge', prog.level);
+  setText('user-rank', prog.rank);
+  // Применяем класс уровня к бейджу
+  const badge = document.getElementById('menu-level-badge');
+  if (badge) {
+    badge.className = 'level-badge level-bg-' + prog.level;
+  }
+}
+
+/* ─── XP ПОСТ-БОЙ АНИМАЦИЯ ──────────────────────── */
+function showXpReward(xpData) {
+  if (!xpData || App.user.isGuest) return;
+  const block = document.getElementById('xp-reward-block');
+  if (!block) return;
+
+  // Обновляем XP у пользователя
+  App.user.xp = xpData.xpAfter;
+  saveJSON('bs_user', App.user);
+  updateMenuLevel();
+
+  const progBefore = getXpProgress(xpData.xpBefore);
+  const progAfter  = getXpProgress(xpData.xpAfter);
+
+  setText('xp-gained', '+' + xpData.xpGain + ' XP');
+  setText('xp-ring-level', progAfter.level);
+  setText('xp-ring-rank',  progAfter.rank);
+  setText('xp-progress-text', progAfter.xpInLevel + ' / ' + progAfter.xpNeeded + ' XP');
+
+  // Показываем блок
+  block.classList.remove('hidden');
+
+  // Анимация прогресс-бара: сначала старый, потом анимируем к новому
+  const bar  = document.getElementById('xp-progress-bar');
+  const ring = document.getElementById('xp-ring-fill');
+
+  if (bar)  bar.style.width = progBefore.pct + '%';
+  if (ring) setRingProgress(ring, progBefore.pct, 80);
+
+  // Задержка перед анимацией
+  setTimeout(() => {
+    if (bar)  bar.style.width = progAfter.pct + '%';
+    if (ring) setRingProgress(ring, progAfter.pct, 80);
+
+    // Level up?
+    const lvlUpEl = document.getElementById('xp-levelup');
+    if (xpData.levelUp && lvlUpEl) {
+      setTimeout(() => {
+        lvlUpEl.classList.remove('hidden');
+        lvlUpEl.textContent = '⬆ УРОВЕНЬ ' + progAfter.level + '!';
+        lvlUpEl.classList.add('anim-levelup');
+        Sound.win && Sound.win();
+      }, 600);
+    }
+  }, 400);
+}
+
+// Рисует заполнение "обводки" квадрата через stroke-dasharray на rect
+function setRingProgress(rectEl, pct, size) {
+  // Периметр квадрата 72x72 (отступ 4 с каждой стороны внутри 80x80)
+  const perim = 4 * (size - 8); // = 4 * 72 = 288 для size=80
+  const fill  = perim * pct / 100;
+  rectEl.style.strokeDasharray  = fill + ' ' + (perim - fill);
+  rectEl.style.strokeDashoffset = (perim * 0.25).toString(); // старт сверху по центру
+}
+
+/* ─── ЭКРАН ПРОФИЛЯ ──────────────────────────────── */
+async function renderProfileScreen() {
+  const xp    = App.user.xp || 0;
+  const prog  = getXpProgress(xp);
+
+  setText('profile-name',  App.user.name);
+  setText('profile-rank',  prog.rank);
+  setText('profile-level-tag', 'Ур. ' + prog.level);
+  setText('profile-ring-level', prog.level);
+  setText('profile-xp-current', prog.xpInLevel);
+  setText('profile-xp-needed',  prog.xpNeeded);
+  setText('profile-xp-total',   xp);
+
+  // Прогресс-бар
+  const bar = document.getElementById('profile-progress-bar');
+  if (bar) bar.style.width = prog.pct + '%';
+
+  // Рамка аватара с уровнем
+  const frameEl = document.getElementById('profile-avatar-frame');
+  if (frameEl) frameEl.className = 'profile-avatar-frame level-frame-' + prog.level;
+
+  const avEl = document.getElementById('profile-avatar');
+  if (avEl) {
+    avEl.innerHTML = App.user.photo
+      ? `<img src="${App.user.photo}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+      : (App.user.name[0]||'?').toUpperCase();
+  }
+
+  // Уровень-бейдж
+  const levelTag = document.getElementById('profile-level-tag');
+  if (levelTag) levelTag.className = 'profile-level-tag level-bg-' + prog.level;
+
+  // Ring SVG
+  const ringFill = document.getElementById('profile-ring-fill');
+  if (ringFill) setRingProgress(ringFill, prog.pct, 120);
+
+  // Обновляем с сервера
+  if (!App.user.isGuest) {
+    try {
+      const res = await fetch('/api/xp/' + App.user.id);
+      const j   = await res.json();
+      if (j.ok && j.data) {
+        App.user.xp = j.data.xp;
+        saveJSON('bs_user', App.user);
+        renderProfileScreen(); // перерисовываем с актуальными данными
+      }
+    } catch(e) {}
+  }
 }
 
 function bindNav() {
@@ -2239,7 +2412,16 @@ function bindNav() {
     Sound.click();
     if (scr === 'leaderboard') renderLeaderboard();
     if (scr === 'stats')       renderStatsScreen();
+    if (scr === 'profile')     renderProfileScreen();
     showScreen(scr, { isBack });
+  });
+
+  // Открытие профиля по клику на аватар/имя
+  document.getElementById('btn-open-profile')?.addEventListener('click', () => {
+    Sound.click();
+    if (App.user.isGuest) return; // гостям профиль недоступен
+    renderProfileScreen();
+    showScreen('profile');
   });
 
   document.getElementById('mode-bot-easy')?.addEventListener('click',   () => startBotGame('bot-easy'));
@@ -2431,14 +2613,17 @@ function renderOpponentAvatar(name, isBot) {
   const info = document.getElementById('opponent-info');
   if (!info) return;
   const letter = isBot ? 'Б' : (name ? name[0].toUpperCase() : '?');
-  const duel = Game.opponent?.duel;
+  const duel  = Game.opponent?.duel;
+  const level = Game.opponent?.level || 1;
+  const rank  = Game.opponent?.rank  || '';
   let duelHtml = '';
   if (!isBot && duel) {
     const theirColor = duel.theirWins > duel.myWins ? ' style="color:var(--red)"' : '';
     const myColor    = duel.myWins > duel.theirWins ? ' style="color:var(--green)"' : '';
     duelHtml = `<span class="duel-score"><span${theirColor}>${duel.theirWins}</span>:<span${myColor}>${duel.myWins}</span></span>`;
   }
-  info.innerHTML = `<div class="opp-avatar">${letter}</div><span id="opp-name">${name || (isBot ? 'Бот' : 'Соперник')}</span>${duelHtml}`;
+  const levelHtml = !isBot ? `<span class="opp-level level-bg-${level}">${level}</span>` : '';
+  info.innerHTML = `<div class="opp-avatar-wrap"><div class="opp-avatar">${letter}</div>${levelHtml}</div><div class="opp-name-col"><span id="opp-name">${name || (isBot ? 'Бот' : 'Соперник')}</span>${rank && !isBot ? `<span class="opp-rank-small">${rank}</span>` : ''}${duelHtml}</div>`;
 }
 
 /* ─── СТАРТ ──────────────────────────────────────── */

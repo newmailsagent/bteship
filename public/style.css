@@ -773,3 +773,187 @@ body.theme-light .tg-promo-banner { border-color: rgba(0,0,0,.1); }
   cursor: not-allowed;
   pointer-events: none;
 }
+
+/* ═══════════════════════════════════════════════════
+   XP / УРОВНИ / ПРОФИЛЬ
+═══════════════════════════════════════════════════ */
+
+/* ─── Бейдж уровня в шапке меню ─── */
+.avatar-wrap { position: relative; display: inline-block; flex-shrink: 0; }
+.level-badge {
+  position: absolute; bottom: -4px; right: -6px;
+  min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: 5px; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--bg);
+  background: var(--accent); color: var(--accent-text);
+  line-height: 1;
+}
+
+/* ─── Звание под именем ─── */
+.user-name-row { display: flex; align-items: center; gap: 6px; }
+.user-rank { font-size: 11px; color: var(--accent); font-weight: 500; margin-top: 1px; letter-spacing: .3px; }
+
+/* ─── Цвета уровней (1-30) ─── */
+.level-bg-1,.level-bg-2,.level-bg-3,.level-bg-4 { background: #607d8b; color: #fff; }
+.level-bg-5,.level-bg-6,.level-bg-7,.level-bg-8,.level-bg-9 { background: #43a047; color: #fff; }
+.level-bg-10,.level-bg-11,.level-bg-12,.level-bg-13,.level-bg-14 { background: #1e88e5; color: #fff; }
+.level-bg-15,.level-bg-16,.level-bg-17,.level-bg-18,.level-bg-19 { background: #8e24aa; color: #fff; }
+.level-bg-20,.level-bg-21,.level-bg-22,.level-bg-23,.level-bg-24 { background: #e53935; color: #fff; }
+.level-bg-25,.level-bg-26,.level-bg-27,.level-bg-28,.level-bg-29 { background: linear-gradient(135deg,#f57f17,#e65100); color: #fff; }
+.level-bg-30 { background: linear-gradient(135deg,#ffd600,#ff6d00); color: #111; }
+
+/* ─── Уровень соперника в бою ─── */
+.opp-avatar-wrap { position: relative; display: inline-block; }
+.opp-level {
+  position: absolute; bottom: -3px; right: -5px;
+  min-width: 16px; height: 16px; padding: 0 3px;
+  border-radius: 4px; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--bg);
+}
+.opp-name-col { display: flex; flex-direction: column; justify-content: center; }
+.opp-rank-small { font-size: 10px; color: var(--hint); margin-top: 1px; }
+
+/* ─── Уровень в рейтинге ─── */
+.lb-avatar-wrap { position: relative; display: inline-block; }
+.lb-level-dot {
+  position: absolute; bottom: -3px; right: -5px;
+  min-width: 16px; height: 16px; padding: 0 3px;
+  border-radius: 4px; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--bg2);
+}
+.lb-rank-name { color: var(--hint); }
+
+/* ─── XP блок на экране gameover ─── */
+.xp-reward-block {
+  margin: 8px 0 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.xp-gained {
+  font-size: 22px; font-weight: 800; color: var(--accent);
+  animation: xpGainedPop .5s cubic-bezier(.2,1.4,.4,1) both;
+}
+@keyframes xpGainedPop {
+  from { transform: scale(.5); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+.xp-level-display { display: flex; align-items: center; gap: 14px; width: 100%; max-width: 280px; }
+
+/* ─── Квадратное кольцо прогресса ─── */
+.xp-ring { width: 80px; height: 80px; flex-shrink: 0; }
+.xp-ring-bg {
+  fill: var(--bg2); stroke: var(--bg2); stroke-width: 0;
+}
+.xp-ring-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-dasharray: 0 288;
+  stroke-dashoffset: 72; /* старт сверху по середине верхней грани */
+  transition: stroke-dasharray 1s cubic-bezier(.4,0,.2,1);
+  filter: drop-shadow(0 0 4px var(--accent));
+}
+.xp-ring-level {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 22px; font-weight: 800; color: var(--text);
+}
+.xp-ring-wrap { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
+
+.xp-ring-info { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.xp-ring-rank { font-size: 13px; font-weight: 600; color: var(--accent); }
+
+/* Прогресс-бар XP */
+.xp-progress-bar-wrap {
+  width: 100%; height: 8px; border-radius: 4px;
+  background: var(--bg2); overflow: hidden;
+}
+.xp-progress-bar {
+  height: 100%; border-radius: 4px;
+  background: var(--accent);
+  transition: width 1s cubic-bezier(.4,0,.2,1);
+  box-shadow: 0 0 6px var(--accent);
+}
+.xp-progress-text { font-size: 11px; color: var(--hint); }
+
+/* Level up */
+.xp-levelup {
+  font-size: 16px; font-weight: 800; color: #ffd600;
+  text-shadow: 0 0 12px #ffd60088;
+  letter-spacing: 1px;
+}
+.anim-levelup {
+  animation: levelUpBounce .6s cubic-bezier(.2,1.4,.4,1) both;
+}
+@keyframes levelUpBounce {
+  from { transform: scale(.6) translateY(10px); opacity: 0; }
+  to   { transform: scale(1)  translateY(0);    opacity: 1; }
+}
+
+/* ─── Экран ПРОФИЛЯ ─── */
+.profile-inner {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 20px 32px; gap: 12px;
+}
+.profile-avatar-wrap { position: relative; display: inline-block; margin-bottom: 4px; }
+.profile-avatar-frame {
+  width: 88px; height: 88px; border-radius: 50%;
+  border: 4px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; font-size: 36px; font-weight: 700;
+  background: var(--bg2); color: var(--text);
+  /* Базовая рамка — переопределяется level-frame-N */
+}
+/* Рамки уровней — готовы к кастомизации */
+.level-frame-1,.level-frame-2,.level-frame-3,.level-frame-4 { border-color: #607d8b; }
+.level-frame-5,.level-frame-6,.level-frame-7,.level-frame-8,.level-frame-9 { border-color: #43a047; }
+.level-frame-10,.level-frame-11,.level-frame-12,.level-frame-13,.level-frame-14 { border-color: #1e88e5; }
+.level-frame-15,.level-frame-16,.level-frame-17,.level-frame-18,.level-frame-19 { border-color: #8e24aa; box-shadow: 0 0 12px #8e24aa55; }
+.level-frame-20,.level-frame-21,.level-frame-22,.level-frame-23,.level-frame-24 { border-color: #e53935; box-shadow: 0 0 14px #e5393555; }
+.level-frame-25,.level-frame-26,.level-frame-27,.level-frame-28,.level-frame-29 { border-color: #f57f17; box-shadow: 0 0 16px #f57f1755; }
+.level-frame-30 { border-color: #ffd600; box-shadow: 0 0 20px #ffd60077; }
+
+.profile-level-tag {
+  position: absolute; bottom: -2px; right: -2px;
+  padding: 2px 7px; border-radius: 6px;
+  font-size: 12px; font-weight: 700;
+  border: 2px solid var(--bg);
+}
+.profile-name { font-size: 22px; font-weight: 700; }
+.profile-rank { font-size: 14px; color: var(--accent); font-weight: 600; margin-top: -4px; }
+
+.profile-xp-section {
+  display: flex; align-items: center; gap: 16px;
+  width: 100%; max-width: 340px;
+  background: var(--bg2); border-radius: 16px; padding: 16px;
+  margin-top: 8px;
+}
+.profile-ring-wrap { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
+.profile-ring { width: 120px; height: 120px; }
+.profile-ring-bg { fill: var(--bg3, #1a1a2e); stroke: none; }
+.profile-ring-fill {
+  fill: none; stroke: var(--accent); stroke-width: 9; stroke-linecap: round;
+  stroke-dasharray: 0 448;
+  stroke-dashoffset: 112;
+  transition: stroke-dasharray .8s cubic-bezier(.4,0,.2,1);
+  filter: drop-shadow(0 0 5px var(--accent));
+}
+.profile-ring-level {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 32px; font-weight: 800; color: var(--text);
+}
+.profile-xp-details { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.profile-xp-label { font-size: 11px; color: var(--hint); text-transform: uppercase; letter-spacing: .5px; }
+.profile-progress-wrap {
+  width: 100%; height: 10px; border-radius: 5px;
+  background: var(--bg); overflow: hidden;
+}
+.profile-progress-bar {
+  height: 100%; border-radius: 5px; background: var(--accent);
+  transition: width .8s cubic-bezier(.4,0,.2,1);
+  box-shadow: 0 0 8px var(--accent);
+}
+.profile-xp-nums { font-size: 13px; font-weight: 600; }
+.profile-xp-total { font-size: 11px; color: var(--hint); }
