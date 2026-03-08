@@ -301,20 +301,31 @@ function addWin(id, shots, hits, isOnline = false, sunkenCount = 0) {
     updated_at=strftime('%s','now') WHERE id=?`).run(shots, hits, id);
   let xpResult = null;
   if (isOnline) {
+    const acc = shots > 0 ? hits / shots : 0;
+    const isLegit = acc <= MAX_LEGIT_ACCURACY;
+
     db.prepare(`UPDATE players SET online_wins=online_wins+1,
       online_shots=online_shots+?, online_hits=online_hits+? WHERE id=?`).run(shots, hits, id);
-    const p = db.prepare(`SELECT rating_active FROM players WHERE id=?`).get(id);
-    if (p?.rating_active === 1) {
-      db.prepare(`UPDATE players SET rated_wins=rated_wins+1,
-        rated_shots=rated_shots+?, rated_hits=rated_hits+? WHERE id=?`).run(shots, hits, id);
-    }
-    // Анти-фарм: точность > 60% = подозрительно, XP не начисляется
-    const acc = shots > 0 ? hits / shots : 0;
-    if (acc <= MAX_LEGIT_ACCURACY) {
+
+    if (isLegit) {
+      // Честный бой — засчитываем в рейтинг и начисляем XP
+      const p = db.prepare(`SELECT rating_active FROM players WHERE id=?`).get(id);
+      if (p?.rating_active === 1) {
+        db.prepare(`UPDATE players SET rated_wins=rated_wins+1,
+          rated_shots=rated_shots+?, rated_hits=rated_hits+? WHERE id=?`).run(shots, hits, id);
+      }
       const xpReward = calcXpReward('win', sunkenCount, shots, hits);
       xpResult = addXp(id, xpReward);
     } else {
-      console.log(`[XP] Blocked for ${id}: acc=${(acc*100).toFixed(1)}% > 60%`);
+      // Читер: рейтинг не засчитывается, XP = 0, но клиент видит блок
+      console.log(`[ANTI-FARM] Blocked: ${id} acc=${(acc*100).toFixed(1)}%`);
+      const row = db.prepare(`SELECT xp FROM players WHERE id=?`).get(id);
+      const xpNow = row?.xp || 0;
+      xpResult = {
+        xpBefore: xpNow, xpAfter: xpNow, xpGain: 0,
+        baseXp: 0, bonusXp: 0,
+        levelBefore: calcLevel(xpNow), levelAfter: calcLevel(xpNow), levelUp: false,
+      };
     }
   }
   return xpResult;
