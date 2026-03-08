@@ -765,3 +765,11 @@ body.theme-light .tg-promo-banner { border-color: rgba(0,0,0,.1); }
 .rematch-status.declined {
   color: var(--red, #e55);
 }
+
+/* ─── Задизабленная кнопка реванша ─── */
+#btn-rematch.btn-disabled,
+#btn-rematch:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}

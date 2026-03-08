@@ -1497,11 +1497,12 @@ const Rematch = {
   _clear() {
     if (this._interval) { clearInterval(this._interval); this._interval = null; }
     const btn = document.getElementById('btn-rematch');
-    if (btn) { btn.textContent = 'Реванш'; btn.disabled = false; btn._timerActive = false; btn.classList.remove('pulse-accent'); }
+    if (btn) { btn.textContent = 'Реванш'; btn.disabled = false; btn._timerActive = false; btn.classList.remove('pulse-accent', 'btn-disabled'); }
     const statusEl = document.getElementById('rematch-status');
     if (statusEl) { statusEl.classList.add('hidden'); statusEl.classList.remove('opponent-wants','declined'); statusEl.textContent = ''; }
   },
 
+  // Таймер для того, кто НАЖАЛ реванш первым
   startTimer() {
     this._clear();
     this._secs = 10;
@@ -1509,9 +1510,37 @@ const Rematch = {
     if (btn) { btn._timerActive = true; btn.disabled = true; }
     const update = () => {
       if (btn) btn.textContent = `Ожидаем… ${this._secs}с`;
+      if (this._secs <= 0) { clearInterval(this._interval); this._interval = null; }
+      this._secs--;
+    };
+    update();
+    this._interval = setInterval(update, 1000);
+  },
+
+  // Таймер для того, кто ПОЛУЧИЛ предложение реванша
+  startOpponentTimer() {
+    if (this._interval) return; // если уже нажал — не перезапускаем
+    this._secs = 10;
+    const btn = document.getElementById('btn-rematch');
+    // Кнопка остаётся активной — противник может принять
+    const update = () => {
+      if (btn && !btn._timerActive) btn.textContent = `Реванш (${this._secs}с)`;
       if (this._secs <= 0) {
         clearInterval(this._interval); this._interval = null;
-        // Таймер истёк на нашей стороне, сервер пришлёт rematch_declined
+        // Время вышло — деактивируем кнопку и редиректим
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Реванш';
+          btn.classList.add('btn-disabled');
+        }
+        const statusEl = document.getElementById('rematch-status');
+        if (statusEl) {
+          statusEl.textContent = 'Время вышло';
+          statusEl.classList.remove('opponent-wants');
+          statusEl.classList.add('declined');
+        }
+        setTimeout(() => showScreen('menu'), 2500);
+        return;
       }
       this._secs--;
     };
@@ -1774,20 +1803,22 @@ const WS = {
       showModal('Ошибка', message, [{ label: 'Ок', cls: 'btn-ghost', action: closeModal }]);
     });
 
+    // Обновляем счётчик онлайна через основной сокет (без отдельного соединения)
+    this.socket.on('online_count', ({ count }) => {
+      document.querySelectorAll('.online-count-val').forEach(el => el.textContent = count);
+    });
+
     // ── Реванш ───────────────────────────────────────
     this.socket.on('rematch_requested', () => {
-      // Соперник нажал реванш — показываем уведомление на нашем экране
+      // Соперник нажал реванш — показываем уведомление и запускаем таймер на кнопке
       const statusEl = document.getElementById('rematch-status');
       if (statusEl) {
-        statusEl.textContent = 'Соперник предлагает вам реванш!';
+        statusEl.textContent = 'Соперник предлагает реванш!';
         statusEl.classList.remove('hidden', 'declined');
         statusEl.classList.add('opponent-wants');
       }
-      // Подсвечиваем кнопку реванша
-      const rematchBtn = document.getElementById('btn-rematch');
-      if (rematchBtn && !rematchBtn._timerActive) {
-        rematchBtn.classList.add('pulse-accent');
-      }
+      // Запускаем таймер на кнопке у получателя тоже
+      Rematch.startOpponentTimer();
     });
 
     this.socket.on('rematch_accepted', () => {
@@ -1798,7 +1829,7 @@ const WS = {
     });
 
     this.socket.on('rematch_declined', () => {
-      // Соперник не принял в течение 10 сек
+      // Соперник не принял в течение 10 сек — только для того, кто предлагал
       Rematch._clear();
       const statusEl = document.getElementById('rematch-status');
       if (statusEl) {
@@ -1810,6 +1841,7 @@ const WS = {
       if (rematchBtn) {
         rematchBtn.disabled = true;
         rematchBtn.textContent = 'Реванш';
+        rematchBtn.classList.add('btn-disabled');
       }
       setTimeout(() => showScreen('menu'), 3000);
     });
@@ -2303,28 +2335,13 @@ function initOnlineCounter() {
     document.querySelectorAll('.online-count-val').forEach(el => el.textContent = count);
   };
 
-  // Сразу подключаемся лёгким сокетом только для счётчика
-  const loadIO = () => new Promise(resolve => {
-    if (window.io) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = window.location.origin + '/socket.io/socket.io.js';
-    s.onload = resolve; s.onerror = resolve;
-    document.head.appendChild(s);
-  });
-
-  loadIO().then(() => {
-    if (!window.io) return;
-    try {
-      const sock = io(window.location.origin, { transports: ['websocket','polling'] });
-      sock.on('online_count', ({ count }) => update(count));
-      sock.on('connect_error', () => {});
-    } catch(e) {}
-  });
-
-  // Резервный HTTP-поллинг
+  // Только HTTP-поллинг — не создаём отдельный сокет, чтобы не накручивать счётчик онлайна
   const poll = () => fetch('/api/online').then(r => r.json()).then(d => update(d.count)).catch(() => {});
   poll();
-  setInterval(poll, 20000);
+  setInterval(poll, 15000);
+
+  // Когда основной WS-сокет подключён — слушаем обновления через него
+  // (подключается в startOnline → WS.connect, там добавляем слушатель)
 }
 
 /* ─── СВАЙП НАЗАД (от 1/3 экрана) ───────────────── */
