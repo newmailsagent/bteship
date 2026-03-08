@@ -1665,7 +1665,9 @@ function endGame(result) {
   Rematch._clear();
   setTimeout(() => {
     showScreen('gameover');
-    // Показываем XP только для онлайн-боёв
+    // XP только для онлайн-боёв
+    const xpBlock = document.getElementById('xp-reward-block');
+    if (xpBlock) xpBlock.classList.add('hidden');
     if (Game.mode === 'online' && Game._pendingXp) {
       setTimeout(() => { showXpReward(Game._pendingXp); Game._pendingXp = null; }, 300);
     }
@@ -2303,54 +2305,162 @@ function showXpReward(xpData) {
   const block = document.getElementById('xp-reward-block');
   if (!block) return;
 
-  // Обновляем XP у пользователя
   App.user.xp = xpData.xpAfter;
   saveJSON('bs_user', App.user);
   updateMenuLevel();
 
   const progBefore = getXpProgress(xpData.xpBefore);
   const progAfter  = getXpProgress(xpData.xpAfter);
+  const baseXp  = xpData.baseXp  || Math.min(xpData.xpGain, 1000);
+  const bonusXp = xpData.bonusXp || Math.max(0, xpData.xpGain - baseXp);
 
-  setText('xp-gained', '+' + xpData.xpGain + ' XP');
-  setText('xp-ring-level', progAfter.level);
-  setText('xp-ring-rank',  progAfter.rank);
-  setText('xp-progress-text', progAfter.xpInLevel + ' / ' + progAfter.xpNeeded + ' XP');
+  // Сначала показываем базовые, потом бонус
+  const gainEl = document.getElementById('xp-gained');
+  if (gainEl) {
+    gainEl.innerHTML = '<span class="xp-base">+' + baseXp + ' XP базовых</span>';
+  }
 
-  // Показываем блок
+  setText('xp-ring-level', progBefore.level);
+  setText('xp-ring-rank',  progBefore.rank);
+  setText('xp-progress-text', progBefore.xpInLevel + ' / ' + progBefore.xpNeeded + ' XP');
+
+  const lvlEl  = document.getElementById('xp-ring-level');
+  const lvlUpEl = document.getElementById('xp-levelup');
+  if (lvlUpEl) { lvlUpEl.classList.add('hidden'); lvlUpEl.classList.remove('anim-levelup'); }
+
   block.classList.remove('hidden');
 
-  // Анимация прогресс-бара: сначала старый, потом анимируем к новому
-  const bar  = document.getElementById('xp-progress-bar');
-  const ring = document.getElementById('xp-ring-fill');
+  const bar   = document.getElementById('xp-progress-bar');
+  const ring  = document.getElementById('xp-ring-fill');
+  const barBonus = document.getElementById('xp-progress-bar-bonus');
 
-  if (bar)  bar.style.width = progBefore.pct + '%';
-  if (ring) setRingProgress(ring, progBefore.pct, 80);
+  // Шаг 0: мгновенно ставим стартовую позицию (без transition)
+  if (bar)  { bar.style.transition = 'none'; bar.style.width = progBefore.pct + '%'; }
+  if (ring) { ring.style.transition = 'none'; setRingProgress(ring, progBefore.pct, 80); }
+  if (barBonus) { barBonus.style.transition = 'none'; barBonus.style.width = '0%'; }
 
-  // Задержка перед анимацией
+  // Шаг 1: через 350ms — анимируем базовые XP
+  const xpAfterBase = xpData.xpBefore + baseXp;
+  const progMid = getXpProgress(xpAfterBase);
+
   setTimeout(() => {
-    if (bar)  bar.style.width = progAfter.pct + '%';
-    if (ring) setRingProgress(ring, progAfter.pct, 80);
-
-    // Level up?
-    const lvlUpEl = document.getElementById('xp-levelup');
-    if (xpData.levelUp && lvlUpEl) {
+    // Если level up при базовых — сначала доходим до 100%, потом меняем уровень и идём дальше
+    if (progMid.level > progBefore.level) {
+      // Анимируем до конца текущего уровня
+      if (bar)  { bar.style.transition = ''; bar.style.width = '100%'; }
+      if (ring) { ring.style.transition = ''; setRingProgress(ring, 100, 80); }
       setTimeout(() => {
-        lvlUpEl.classList.remove('hidden');
-        lvlUpEl.textContent = '⬆ УРОВЕНЬ ' + progAfter.level + '!';
-        lvlUpEl.classList.add('anim-levelup');
-        Sound.win && Sound.win();
-      }, 600);
+        _levelUpFlash(lvlEl, progMid.level, lvlUpEl);
+        if (bar)  { bar.style.transition = 'none'; bar.style.width = '0%'; }
+        if (ring) { ring.style.transition = 'none'; setRingProgress(ring, 0, 80); }
+        setText('xp-ring-level', progMid.level);
+        setText('xp-ring-rank', progMid.rank);
+        setTimeout(() => {
+          if (bar)  { bar.style.transition = ''; bar.style.width = progMid.pct + '%'; }
+          if (ring) { ring.style.transition = ''; setRingProgress(ring, progMid.pct, 80); }
+          setText('xp-progress-text', progMid.xpInLevel + ' / ' + progMid.xpNeeded + ' XP');
+          _showBonusPhase(xpData, progMid, progAfter, bar, ring, barBonus, gainEl, baseXp, bonusXp, lvlEl, lvlUpEl);
+        }, 350);
+      }, 700);
+    } else {
+      if (bar)  { bar.style.transition = ''; bar.style.width = progMid.pct + '%'; }
+      if (ring) { ring.style.transition = ''; setRingProgress(ring, progMid.pct, 80); }
+      setText('xp-progress-text', progMid.xpInLevel + ' / ' + progMid.xpNeeded + ' XP');
+      _showBonusPhase(xpData, progMid, progAfter, bar, ring, barBonus, gainEl, baseXp, bonusXp, lvlEl, lvlUpEl);
     }
+  }, 350);
+}
+
+function _showBonusPhase(xpData, progMid, progAfter, bar, ring, barBonus, gainEl, baseXp, bonusXp, lvlEl, lvlUpEl) {
+  if (bonusXp <= 0) {
+    // Нет бонуса — просто финальный шаг level-up если нужен
+    if (xpData.levelUp && progAfter.level > progMid.level) {
+      _doFinalLevelUp(progAfter, bar, ring, lvlEl, lvlUpEl);
+    } else if (xpData.levelUp) {
+      setTimeout(() => _levelUpFlash(lvlEl, progAfter.level, lvlUpEl), 400);
+    }
+    return;
+  }
+
+  // Показываем бонусную фазу через 600ms после базовой
+  setTimeout(() => {
+    if (gainEl) gainEl.innerHTML =
+      '<span class="xp-base">+' + baseXp + ' XP</span> ' +
+      '<span class="xp-bonus">+' + bonusXp + ' бонус за точность</span>';
+
+    // Анимируем бонусный кусок поверх
+    if (barBonus) {
+      const startPct = progMid.pct;
+      barBonus.style.left = startPct + '%';
+      barBonus.style.transition = 'none';
+      barBonus.style.width = '0%';
+      setTimeout(() => {
+        barBonus.style.transition = '';
+        if (progAfter.level > progMid.level) {
+          // Level up в бонусной фазе
+          barBonus.style.width = (100 - startPct) + '%';
+          setTimeout(() => {
+            _levelUpFlash(lvlEl, progAfter.level, lvlUpEl);
+            if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; }
+            if (ring) { ring.style.transition = 'none'; setRingProgress(ring, 0, 80); }
+            if (barBonus) { barBonus.style.transition = 'none'; barBonus.style.width = '0%'; barBonus.style.left = '0%'; }
+            setText('xp-ring-level', progAfter.level);
+            setText('xp-ring-rank', progAfter.rank);
+            setTimeout(() => {
+              if (bar)  { bar.style.transition = ''; bar.style.width = progAfter.pct + '%'; }
+              if (ring) { ring.style.transition = ''; setRingProgress(ring, progAfter.pct, 80); }
+              setText('xp-progress-text', progAfter.xpInLevel + ' / ' + progAfter.xpNeeded + ' XP');
+            }, 200);
+          }, 700);
+        } else {
+          barBonus.style.width = (progAfter.pct - startPct) + '%';
+          if (ring) { ring.style.transition = ''; setRingProgress(ring, progAfter.pct, 80); }
+          setText('xp-progress-text', progAfter.xpInLevel + ' / ' + progAfter.xpNeeded + ' XP');
+          if (xpData.levelUp) setTimeout(() => _levelUpFlash(lvlEl, progAfter.level, lvlUpEl), 500);
+        }
+      }, 50);
+    }
+  }, 600);
+}
+
+function _doFinalLevelUp(progAfter, bar, ring, lvlEl, lvlUpEl) {
+  setTimeout(() => {
+    if (bar)  { bar.style.transition = ''; bar.style.width = '100%'; }
+    if (ring) { ring.style.transition = ''; setRingProgress(ring, 100, 80); }
+    setTimeout(() => {
+      _levelUpFlash(lvlEl, progAfter.level, lvlUpEl);
+      if (bar)  { bar.style.transition = 'none'; bar.style.width = '0%'; }
+      if (ring) { ring.style.transition = 'none'; setRingProgress(ring, 0, 80); }
+      setText('xp-ring-level', progAfter.level);
+      setText('xp-ring-rank', progAfter.rank);
+      setTimeout(() => {
+        if (bar)  { bar.style.transition = ''; bar.style.width = progAfter.pct + '%'; }
+        if (ring) { ring.style.transition = ''; setRingProgress(ring, progAfter.pct, 80); }
+        setText('xp-progress-text', progAfter.xpInLevel + ' / ' + progAfter.xpNeeded + ' XP');
+      }, 300);
+    }, 700);
   }, 400);
+}
+
+function _levelUpFlash(lvlEl, level, lvlUpEl) {
+  if (lvlEl) {
+    lvlEl.classList.add('level-pop');
+    setTimeout(() => lvlEl.classList.remove('level-pop'), 600);
+  }
+  if (lvlUpEl) {
+    lvlUpEl.classList.remove('hidden');
+    lvlUpEl.textContent = 'Новый уровень!';
+    lvlUpEl.classList.add('anim-levelup');
+    Sound.win && Sound.win();
+  }
 }
 
 // Рисует заполнение "обводки" квадрата через stroke-dasharray на rect
 function setRingProgress(rectEl, pct, size) {
-  // Периметр квадрата 72x72 (отступ 4 с каждой стороны внутри 80x80)
-  const perim = 4 * (size - 8); // = 4 * 72 = 288 для size=80
+  const perim = 4 * (size - 8);
   const fill  = perim * pct / 100;
   rectEl.style.strokeDasharray  = fill + ' ' + (perim - fill);
-  rectEl.style.strokeDashoffset = (perim * 0.25).toString(); // старт сверху по центру
+  rectEl.style.strokeDashoffset = (perim * 0.25).toString();
 }
 
 /* ─── ЭКРАН ПРОФИЛЯ ──────────────────────────────── */
@@ -2474,13 +2584,19 @@ function bindNav() {
     Sound.click();
     const mode = pendingGameMode || 'bot-easy';
     if (mode === 'online') {
-      // Онлайн: WS-реванш с тем же соперником
+      // Онлайн: WS-реванш только с тем же соперником в той же комнате
       if (WS.socket && WS.roomId) {
         Rematch.request();
       } else {
-        // Соединение потеряно — просто ищем нового
-        WS.disconnect();
-        startOnline('random');
+        // Сокет отвалился — реванш невозможен, показываем сообщение
+        const statusEl = document.getElementById('rematch-status');
+        if (statusEl) {
+          statusEl.textContent = 'Соединение потеряно, реванш недоступен';
+          statusEl.classList.remove('hidden', 'opponent-wants');
+          statusEl.classList.add('declined');
+        }
+        const btn = document.getElementById('btn-rematch');
+        if (btn) { btn.disabled = true; btn.classList.add('btn-disabled'); }
       }
     } else {
       // Бот: просто заново

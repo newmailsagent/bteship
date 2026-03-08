@@ -124,7 +124,16 @@ try {
 // Онлайн-игроки: socketId -> {playerId, name, connectedAt}
 const onlineSessions = new Map();
 
-function getOnlineCount() { return onlineSessions.size; }
+function getOnlineCount() {
+  // Дедупликация: каждый уникальный playerId считается 1 раз.
+  // Гости без playerId считаются по socketId.
+  const seen = new Set();
+  for (const [, session] of onlineSessions) {
+    if (session.playerId) seen.add('p:' + session.playerId);
+    else seen.add('s:' + session.socketId);
+  }
+  return seen.size;
+}
 function broadcastOnlineCount() { io.emit('online_count', { count: getOnlineCount() }); }
 
 function normalizeId(id) {
@@ -227,15 +236,19 @@ function calcXpReward(result, sunkenCount, shots, hits) {
     if (acc >= 0.50) accBonus = 500;
     else if (acc >= 0.45) accBonus = 300;
     else if (acc >= 0.40) accBonus = 150;
-    return 1000 + accBonus + 50 * (sunkenCount || 0);
+    const shipBonus = 50 * (sunkenCount || 0);
+    const baseXp  = 1000 + shipBonus;
+    const bonusXp = accBonus;
+    return { total: baseXp + bonusXp, baseXp, bonusXp };
   } else {
-    // loss / сдача соперника
-    return Math.min(400, 300 + 10 * (sunkenCount || 0));
+    const total = Math.min(400, 300 + 10 * (sunkenCount || 0));
+    return { total, baseXp: total, bonusXp: 0 };
   }
 }
 
-function addXp(id, xpGain) {
+function addXp(id, reward) {
   id = normalizeId(id);
+  const xpGain = typeof reward === 'number' ? reward : reward.total;
   if (!id || id.startsWith('guest_') || xpGain <= 0) return null;
   const before = db.prepare(`SELECT xp FROM players WHERE id=?`).get(id);
   if (!before) return null;
@@ -244,7 +257,9 @@ function addXp(id, xpGain) {
   db.prepare(`UPDATE players SET xp=? WHERE id=?`).run(xpAfter, id);
   const levelBefore = calcLevel(xpBefore);
   const levelAfter  = calcLevel(xpAfter);
-  return { xpBefore, xpAfter, xpGain, levelBefore, levelAfter, levelUp: levelAfter > levelBefore };
+  const baseXp  = typeof reward === 'object' ? reward.baseXp  : xpGain;
+  const bonusXp = typeof reward === 'object' ? reward.bonusXp : 0;
+  return { xpBefore, xpAfter, xpGain, baseXp, bonusXp, levelBefore, levelAfter, levelUp: levelAfter > levelBefore };
 }
 
 function getXpInfo(id) {
@@ -274,8 +289,8 @@ function addWin(id, shots, hits, isOnline = false, sunkenCount = 0) {
       db.prepare(`UPDATE players SET rated_wins=rated_wins+1,
         rated_shots=rated_shots+?, rated_hits=rated_hits+? WHERE id=?`).run(shots, hits, id);
     }
-    const xpGain = calcXpReward('win', sunkenCount, shots, hits);
-    xpResult = addXp(id, xpGain);
+    const xpReward = calcXpReward('win', sunkenCount, shots, hits);
+    xpResult = addXp(id, xpReward);
   }
   return xpResult;
 }
@@ -294,8 +309,8 @@ function addLoss(id, shots, hits, isOnline = false, sunkenCount = 0) {
       db.prepare(`UPDATE players SET rated_losses=rated_losses+1,
         rated_shots=rated_shots+?, rated_hits=rated_hits+? WHERE id=?`).run(shots, hits, id);
     }
-    const xpGain = calcXpReward('loss', sunkenCount, shots, hits);
-    xpResult = addXp(id, xpGain);
+    const xpReward = calcXpReward('loss', sunkenCount, shots, hits);
+    xpResult = addXp(id, xpReward);
   }
   return xpResult;
 }
@@ -434,7 +449,7 @@ io.on('connection', (socket) => {
   console.log(`[+] ${socket.id}`);
 
   // Регистрируем сессию как онлайн (даже без matchmake)
-  onlineSessions.set(socket.id, { playerId: null, name: null, connectedAt: Date.now() });
+  onlineSessions.set(socket.id, { socketId: socket.id, playerId: null, name: null, connectedAt: Date.now() });
   broadcastOnlineCount();
 
   socket.on('matchmake', ({ mode, roomId: friendRoomId, playerId, playerName }) => {
@@ -442,7 +457,7 @@ io.on('connection', (socket) => {
     socket.data.playerId = playerId;
     upsertPlayer(playerId, playerName);
     // Обновляем онлайн-сессию
-    onlineSessions.set(socket.id, { playerId, name: playerName, connectedAt: Date.now() });
+    onlineSessions.set(socket.id, { socketId: socket.id, playerId, name: playerName, connectedAt: Date.now() });
 
     const info = { socketId: socket.id, playerId, name: playerName };
 

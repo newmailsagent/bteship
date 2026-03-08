@@ -235,15 +235,20 @@
 <!-- КОНЕЦ ИГРЫ -->
 <div id="screen-gameover" class="screen">
   <div class="gameover-inner">
-    <div class="gameover-icon" id="gameover-icon">🏆</div>
-    <h1 class="gameover-title" id="gameover-title">ПОБЕДА!</h1>
-    <p class="gameover-sub"   id="gameover-sub">Ты потопил все корабли!</p>
-    <div class="gameover-stats">
-      <div class="go-stat"><span id="go-shots">0</span><small>выстрелов</small></div>
-      <div class="go-stat"><span id="go-hits">0</span><small>попаданий</small></div>
-      <div class="go-stat"><span id="go-acc">0%</span><small>точность</small></div>
+
+    <!-- Блок 1: результат + стата -->
+    <div class="go-result-block">
+      <div class="gameover-icon" id="gameover-icon">🏆</div>
+      <h1 class="gameover-title" id="gameover-title">ПОБЕДА!</h1>
+      <p class="gameover-sub"   id="gameover-sub">Ты потопил все корабли!</p>
+      <div class="gameover-stats">
+        <div class="go-stat"><span id="go-shots">0</span><small>выстрелов</small></div>
+        <div class="go-stat"><span id="go-hits">0</span><small>попаданий</small></div>
+        <div class="go-stat"><span id="go-acc">0%</span><small>точность</small></div>
+      </div>
     </div>
-    <!-- XP прогресс -->
+
+    <!-- Блок 2: XP анимация (только онлайн) -->
     <div class="xp-reward-block hidden" id="xp-reward-block">
       <div class="xp-gained" id="xp-gained">+0 XP</div>
       <div class="xp-level-display">
@@ -258,17 +263,21 @@
           <div class="xp-ring-rank" id="xp-ring-rank">Новобранец Неона</div>
           <div class="xp-progress-bar-wrap">
             <div class="xp-progress-bar" id="xp-progress-bar" style="width:0%"></div>
+            <div class="xp-progress-bar-bonus" id="xp-progress-bar-bonus" style="width:0%;left:0%"></div>
           </div>
           <div class="xp-progress-text" id="xp-progress-text">0 / 1000 XP</div>
         </div>
       </div>
-      <div class="xp-levelup hidden" id="xp-levelup">⬆ УРОВЕНЬ ПОВЫШЕН!</div>
+      <div class="xp-levelup hidden" id="xp-levelup">Новый уровень!</div>
     </div>
-    <div class="btn-col">
+
+    <!-- Блок 3: кнопки -->
+    <div class="go-buttons-block">
       <div id="rematch-status" class="rematch-status hidden"></div>
       <button class="btn btn-primary btn-large" id="btn-rematch">Реванш</button>
       <button class="btn btn-secondary" id="btn-to-menu" data-screen="menu">← Главное меню</button>
     </div>
+
   </div>
 </div>
 
