@@ -1912,10 +1912,8 @@ const WS = {
       showModal('Ошибка', message, [{ label: 'Ок', cls: 'btn-ghost', action: closeModal }]);
     });
 
-    // Обновляем счётчик онлайна через основной сокет
+    // Обновляем счётчик онлайна
     this.socket.on('online_count', ({ count }) => {
-      document.querySelectorAll('.online-count-val').forEach(el => el.textContent = count);
-      // Синхронизируем и HTTP-поллер
       if (initOnlineCounter.update) initOnlineCounter.update(count);
     });
 
@@ -2717,20 +2715,44 @@ function setHTML(id, val) { const el = document.getElementById(id); if(el) el.in
 
 /* ─── СЧЁТЧИК ОНЛАЙНА ────────────────────────────── */
 function initOnlineCounter() {
-  // Обновляем все элементы счётчика
   const update = (count) => {
     document.querySelectorAll('.online-count-val').forEach(el => el.textContent = count);
   };
-  // Запоминаем update чтобы основной WS мог подписаться позже
   initOnlineCounter.update = update;
 
-  // HTTP-запрос сразу при загрузке
-  fetch('/api/online').then(r => r.json()).then(d => update(d.count)).catch(() => {});
+  // Загружаем socket.io и создаём один постоянный сокет присутствия
+  const connect = () => {
+    if (initOnlineCounter._sock) return; // уже есть
+    const sock = io(window.location.origin, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 3000,
+    });
+    initOnlineCounter._sock = sock;
 
-  // Поллинг каждые 15с — никаких доп. сокетов, только HTTP
-  setInterval(() => {
-    fetch('/api/online').then(r => r.json()).then(d => update(d.count)).catch(() => {});
-  }, 15000);
+    sock.on('connect', () => {
+      // Сообщаем серверу кто мы — сразу при подключении и при реконнекте
+      sock.emit('identify', { playerId: App.user?.id || null });
+    });
+    sock.on('online_count', ({ count }) => update(count));
+
+    // Heartbeat каждые 4 минуты — обновляем lastActive на сервере
+    setInterval(() => {
+      if (sock.connected) sock.emit('active');
+    }, 4 * 60 * 1000);
+  };
+
+  if (window.io) {
+    connect();
+  } else {
+    const s = document.createElement('script');
+    s.src = '/socket.io/socket.io.js';
+    s.onload = connect;
+    document.head.appendChild(s);
+  }
+
+  // Фолбэк: первое значение через HTTP пока WS не установился
+  fetch('/api/online').then(r => r.json()).then(d => update(d.count)).catch(() => {});
 }
 
 /* ─── СВАЙП НАЗАД (от 1/3 экрана) ───────────────── */

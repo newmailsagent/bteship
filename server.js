@@ -129,9 +129,14 @@ function getOnlineCount() {
   const now = Date.now();
   const seen = new Set();
   for (const [, s] of onlineSessions) {
-    if (!s.playerId) continue;                           // не считаем до matchmake
-    if (now - s.lastActive > IDLE_TIMEOUT_MS) continue; // не считаем idle
-    seen.add(s.playerId);                                // дедупликация по playerId
+    if (now - s.lastActive > IDLE_TIMEOUT_MS) continue;
+    // TG-игрок: дедупликация по playerId (десктоп + мобайл = 1)
+    // Гость: считаем по socketId
+    if (s.playerId && !s.playerId.startsWith('guest_')) {
+      seen.add('p:' + s.playerId);
+    } else {
+      seen.add('s:' + s.socketId);
+    }
   }
   return seen.size;
 }
@@ -683,7 +688,20 @@ io.on('connection', (socket) => {
   });
 
   // п.5: отключение во время игры = победа оставшемуся
-  // Клиент шлёт heartbeat раз в 5 минут пока вкладка открыта
+  // Клиент шлёт identify сразу при загрузке — регистрирует себя в онлайн
+  socket.on('identify', ({ playerId }) => {
+    const normId = playerId ? normalizeId(playerId) : null;
+    const existing = onlineSessions.get(socket.id) || {};
+    onlineSessions.set(socket.id, {
+      ...existing,
+      socketId: socket.id,
+      playerId: normId,
+      lastActive: Date.now(),
+    });
+    broadcastOnlineCount();
+  });
+
+  // Heartbeat пока вкладка открыта
   socket.on('active', () => { touchSession(socket.id); });
 
   socket.on('disconnect', () => {
