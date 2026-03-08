@@ -129,9 +129,9 @@ function getOnlineCount() {
   const now = Date.now();
   const seen = new Set();
   for (const [, s] of onlineSessions) {
-    if (now - s.lastActive > IDLE_TIMEOUT_MS) continue; // пропускаем idle
-    if (s.playerId) seen.add(s.playerId);               // один игрок = 1 запись
-    else seen.add('g:' + s.socketId);                   // гость — по сокету
+    if (!s.playerId) continue;                           // не считаем до matchmake
+    if (now - s.lastActive > IDLE_TIMEOUT_MS) continue; // не считаем idle
+    seen.add(s.playerId);                                // дедупликация по playerId
   }
   return seen.size;
 }

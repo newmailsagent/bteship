@@ -1665,11 +1665,31 @@ function endGame(result) {
   Rematch._clear();
   setTimeout(() => {
     showScreen('gameover');
-    // XP только для онлайн-боёв
     const xpBlock = document.getElementById('xp-reward-block');
-    if (xpBlock) xpBlock.classList.add('hidden');
-    if (Game.mode === 'online' && Game._pendingXp) {
-      setTimeout(() => { showXpReward(Game._pendingXp); Game._pendingXp = null; }, 300);
+    if (Game.mode === 'online' && !App.user.isGuest) {
+      // Показываем блок сразу — с текущим прогрессом, без анимации
+      if (xpBlock) {
+        xpBlock.classList.remove('hidden');
+        // Рисуем "скелет" — текущий прогресс до получения данных с сервера
+        const prog = getXpProgress(App.user.xp || 0);
+        setText('xp-ring-level', prog.level);
+        setText('xp-progress-text', prog.xpInLevel + ' / ' + prog.xpNeeded + ' XP');
+        const bar  = document.getElementById('xp-progress-bar');
+        const ring = document.getElementById('xp-ring-fill');
+        if (bar)  { bar.style.transition = 'none'; bar.style.width = prog.pct + '%'; }
+        if (ring) { ring.style.transition = 'none'; setRingProgress(ring, prog.pct, 80); }
+        const gainEl = document.getElementById('xp-gained');
+        if (gainEl) gainEl.textContent = '…';
+        const lvlUpEl = document.getElementById('xp-levelup');
+        if (lvlUpEl) { lvlUpEl.classList.add('hidden'); lvlUpEl.classList.remove('anim-levelup'); }
+      }
+      // Если xp_reward уже пришёл — запускаем анимацию
+      if (Game._pendingXp) {
+        setTimeout(() => { showXpReward(Game._pendingXp); Game._pendingXp = null; }, 350);
+      }
+      // Иначе xp_reward socket listener подхватит и вызовет showXpReward сам
+    } else {
+      if (xpBlock) xpBlock.classList.add('hidden');
     }
   }, 800);
 }
@@ -1892,9 +1912,11 @@ const WS = {
       showModal('Ошибка', message, [{ label: 'Ок', cls: 'btn-ghost', action: closeModal }]);
     });
 
-    // Обновляем счётчик онлайна через основной сокет (без отдельного соединения)
+    // Обновляем счётчик онлайна через основной сокет
     this.socket.on('online_count', ({ count }) => {
       document.querySelectorAll('.online-count-val').forEach(el => el.textContent = count);
+      // Синхронизируем и HTTP-поллер
+      if (initOnlineCounter.update) initOnlineCounter.update(count);
     });
 
     // XP награда по итогам онлайн-боя
@@ -2695,54 +2717,20 @@ function setHTML(id, val) { const el = document.getElementById(id); if(el) el.in
 
 /* ─── СЧЁТЧИК ОНЛАЙНА ────────────────────────────── */
 function initOnlineCounter() {
+  // Обновляем все элементы счётчика
   const update = (count) => {
     document.querySelectorAll('.online-count-val').forEach(el => el.textContent = count);
   };
+  // Запоминаем update чтобы основной WS мог подписаться позже
+  initOnlineCounter.update = update;
 
-  // Сразу делаем HTTP-запрос для первого значения
+  // HTTP-запрос сразу при загрузке
   fetch('/api/online').then(r => r.json()).then(d => update(d.count)).catch(() => {});
 
-  // Подключаем лёгкий WS только для счётчика (не matchmake, не играем)
-  // Используем тот же origin — сервер учитывает его в onlineSessions
-  try {
-    const _loadAndConnect = () => {
-      if (WS.socket) {
-        // Уже есть основной сокет — просто слушаем его
-        WS.socket.on('online_count', ({ count }) => update(count));
-        return;
-      }
-      // Создаём отдельный "тихий" сокет только для счётчика
-      if (!window.io) return;
-      const counterSocket = io(window.location.origin, { transports: ['websocket','polling'] });
-      counterSocket.on('online_count', ({ count }) => update(count));
-      counterSocket.on('connect', () => update); // сервер пришлёт broadcast при коннекте
-      // Сохраняем чтобы не создавать дубли
-      initOnlineCounter._socket = counterSocket;
-    };
-
-    if (window.io) {
-      _loadAndConnect();
-    } else {
-      // socket.io ещё не загружен — ждём
-      const s = document.createElement('script');
-      s.src = '/socket.io/socket.io.js';
-      s.onload = _loadAndConnect;
-      document.head.appendChild(s);
-    }
-  } catch(e) {}
-
-  // Heartbeat — шлём серверу 'active' каждые 5 минут чтобы не попасть в idle
+  // Поллинг каждые 15с — никаких доп. сокетов, только HTTP
   setInterval(() => {
-    if (initOnlineCounter._socket?.connected) initOnlineCounter._socket.emit('active');
-    else if (WS.socket?.connected) WS.socket.emit('active');
-  }, 5 * 60 * 1000);
-
-  // Fallback HTTP-поллинг каждые 30с если WS не подключён
-  setInterval(() => {
-    if (!initOnlineCounter._socket?.connected && !WS.socket?.connected) {
-      fetch('/api/online').then(r => r.json()).then(d => update(d.count)).catch(() => {});
-    }
-  }, 30000);
+    fetch('/api/online').then(r => r.json()).then(d => update(d.count)).catch(() => {});
+  }, 15000);
 }
 
 /* ─── СВАЙП НАЗАД (от 1/3 экрана) ───────────────── */
