@@ -832,8 +832,6 @@ const Placement = {
       ship.cells.forEach(({ r, c }) => { this.board[r][c] = CELL_EMPTY; });
       ship.placed = false; ship.cells = [];
       this.selected = ship;
-
-      // Ghost не нужен — ориентир показывается preview на поле
       this._drag.ghost = null;
 
       // renderBoard — убираем корабль с поля визуально
@@ -842,7 +840,6 @@ const Placement = {
     }
 
     if (this._drag.moved) {
-      this._moveGhost(e.clientX, e.clientY);
       this._showPreview(e.clientX, e.clientY);
     }
   },
@@ -962,13 +959,40 @@ const Placement = {
 
   _makeGhost(ship, vertical) {
     const v = vertical !== undefined ? vertical : ship.vertical;
+
+    // Берём реальный размер ячейки с доски
+    const boardEl = document.getElementById('placement-board');
+    const sampleCell = boardEl?.querySelector('.cell');
+    const cellSize = sampleCell ? sampleCell.getBoundingClientRect().width : 32;
+    const gap = 2; // gap между ячейками (из CSS)
+
     const g = document.createElement('div');
-    g.className = 'ship-piece' + (v ? ' vertical' : '');
-    g.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0.7;' +
-      'transform:translate(-50%,-50%);border:2px solid var(--accent);' +
-      'background:var(--bg2);border-radius:5px;padding:4px;touch-action:none;';
+    g.className = 'drag-ghost';
+    g.style.cssText = [
+      'position:fixed',
+      'z-index:9999',
+      'pointer-events:none',
+      'touch-action:none',
+      'display:flex',
+      v ? 'flex-direction:column' : 'flex-direction:row',
+      `gap:${gap}px`,
+      'border-radius:5px',
+      'opacity:0.85',
+      // Центрируем ghost по пальцу (середина первой ячейки)
+      'transform:translate(-50%,-50%)',
+    ].join(';');
+
     for (let i = 0; i < ship.size; i++) {
-      const c = document.createElement('div'); c.className = 'ship-cell'; g.appendChild(c);
+      const c = document.createElement('div');
+      c.style.cssText = [
+        `width:${cellSize}px`,
+        `height:${cellSize}px`,
+        'background:var(--cell-ship)',
+        'border-radius:3px',
+        'border:1.5px solid var(--accent)',
+        'box-sizing:border-box',
+      ].join(';');
+      g.appendChild(c);
     }
     return g;
   },
@@ -982,43 +1006,57 @@ const Placement = {
   _showPreview(cx, cy) {
     this.clearPreview();
     if (!this.selected) return;
-    const el = document.elementFromPoint(cx, cy);
-    if (!el) return;
-    const cell = el.closest('[data-r][data-c]');
-    if (!cell || !document.getElementById('placement-board')?.contains(cell)) return;
-    let r = +cell.dataset.r, c = +cell.dataset.c;
+
+    // Вычисляем ячейку математически — elementFromPoint ненадёжен на тач
+    const boardEl = document.getElementById('placement-board');
+    if (!boardEl) return;
+    const rect = boardEl.getBoundingClientRect();
+
+    if (cx < rect.left || cx > rect.right || cy < rect.top || cy > rect.bottom) return;
+
+    // gap между ячейками = 2px (из CSS), 9 gaps на 10 ячеек
+    const cellW = (rect.width  - 2 * 9) / BOARD_SIZE;
+    const cellH = (rect.height - 2 * 9) / BOARD_SIZE;
+    let c = Math.floor((cx - rect.left) / (cellW + 2));
+    let r = Math.floor((cy - rect.top)  / (cellH + 2));
+    c = Math.max(0, Math.min(BOARD_SIZE - 1, c));
+    r = Math.max(0, Math.min(BOARD_SIZE - 1, r));
+
     const size = this.selected.size;
     if (this.vertical) r = Math.min(r, BOARD_SIZE - size);
     else               c = Math.min(c, BOARD_SIZE - size);
-    r = Math.max(0, r); c = Math.max(0, c);
+
     const valid = canPlace(this.board, r, c, size, this.vertical);
     for (let i = 0; i < size; i++) {
       const nr = this.vertical ? r+i : r, nc = this.vertical ? c : c+i;
       if (!inBounds(nr, nc)) continue;
-      const cl = document.querySelector(`#placement-board [data-r="${nr}"][data-c="${nc}"]`);
+      const cl = boardEl.querySelector(`[data-r="${nr}"][data-c="${nc}"]`);
       if (cl) cl.classList.add(valid ? 'preview' : 'invalid');
     }
   },
 
   _dropAt(cx, cy, ship) {
-    const el = document.elementFromPoint(cx, cy);
-    const cell = el?.closest('[data-r][data-c]');
     const boardEl = document.getElementById('placement-board');
-    if (cell && boardEl?.contains(cell)) {
-      let r = +cell.dataset.r, c = +cell.dataset.c;
-      const size = ship.size;
-      if (this.vertical) r = Math.min(r, BOARD_SIZE - size);
-      else               c = Math.min(c, BOARD_SIZE - size);
-      r = Math.max(0, r); c = Math.max(0, c);
-      if (canPlace(this.board, r, c, size, this.vertical)) {
-        ship.vertical = this.vertical;
-        ship.cells = placeShip(this.board, r, c, size, this.vertical);
-        ship.placed = true;
-        this.selected = null;
-        Sound.place(); vibrate([15]); return;
+    if (boardEl) {
+      const rect = boardEl.getBoundingClientRect();
+      if (cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom) {
+        const cellW = (rect.width  - 2 * 9) / BOARD_SIZE;
+        const cellH = (rect.height - 2 * 9) / BOARD_SIZE;
+        let c = Math.max(0, Math.min(BOARD_SIZE - 1, Math.floor((cx - rect.left) / (cellW + 2))));
+        let r = Math.max(0, Math.min(BOARD_SIZE - 1, Math.floor((cy - rect.top)  / (cellH + 2))));
+        const size = ship.size;
+        if (this.vertical) r = Math.min(r, BOARD_SIZE - size);
+        else               c = Math.min(c, BOARD_SIZE - size);
+        if (canPlace(this.board, r, c, size, this.vertical)) {
+          ship.vertical = this.vertical;
+          ship.cells = placeShip(this.board, r, c, size, this.vertical);
+          ship.placed = true;
+          this.selected = null;
+          Sound.place(); vibrate([15]); return;
+        }
       }
     }
-    // Промах — в dok
+    // Промах — возвращаем в dok
     vibrate([20,10,20]);
     ship.placed = false; ship.cells = []; ship.vertical = false;
     this.vertical = false; this.selected = null;
