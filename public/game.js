@@ -3110,13 +3110,18 @@ function openShopItem(itemId) {
 async function handleShopItemBtn() {
   const itemId = _currentShopItemId;
   const item   = _shopItems.find(i => i.id === itemId);
-  if (!item || !App.user?.id || App.user?.id?.startsWith('guest_')) return;
+  if (!item) return;
+
+  // Гость — предлагаем войти через TG
+  if (!App.user?.id || App.user?.id?.startsWith('guest_')) {
+    alert('Для покупки необходимо войти через Telegram');
+    return;
+  }
 
   const owned    = !!_shopInventory[itemId];
   const equipped = Object.values(_shopEquipped).includes(itemId);
 
   if (equipped) {
-    // Снять
     await fetch('/api/unequip', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: App.user?.id, slot: item.type }),
@@ -3128,7 +3133,6 @@ async function handleShopItemBtn() {
   }
 
   if (owned) {
-    // Надеть
     await fetch('/api/equip', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: App.user?.id, itemId }),
@@ -3139,26 +3143,40 @@ async function handleShopItemBtn() {
     return;
   }
 
-  // Купить — создаём invoice и открываем через TG
+  // Купить — создаём invoice
   try {
+    const btnEl = document.getElementById('shop-item-btn');
+    if (btnEl) { btnEl.textContent = 'Загрузка...'; btnEl.disabled = true; }
+
     const res = await fetch('/api/shop/buy', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: App.user?.id, itemId }),
     }).then(r => r.json());
 
+    if (btnEl) { btnEl.textContent = 'Купить'; btnEl.disabled = false; }
+
     if (res.ok && res.invoiceUrl) {
-      window.Telegram?.WebApp?.openInvoice(res.invoiceUrl, status => {
-        if (status === 'paid') {
-          _shopInventory[itemId] = true;
-          openShopItem(itemId);
-          renderShopGrid();
-        }
-      });
+      if (window.Telegram?.WebApp?.openInvoice) {
+        // Внутри Telegram Mini App
+        window.Telegram.WebApp.openInvoice(res.invoiceUrl, status => {
+          if (status === 'paid') {
+            _shopInventory[itemId] = true;
+            openShopItem(itemId);
+            renderShopGrid();
+          }
+        });
+      } else {
+        // Фолбэк для браузера — открываем ссылку
+        window.open(res.invoiceUrl, '_blank');
+      }
     } else {
       console.error('[Shop] buy error:', res);
+      alert('Ошибка: ' + (res.error || 'неизвестная ошибка'));
     }
   } catch(e) {
     console.error('[Shop] buy exception:', e);
+    const btnEl = document.getElementById('shop-item-btn');
+    if (btnEl) { btnEl.textContent = 'Купить'; btnEl.disabled = false; }
   }
 }
 
