@@ -2194,7 +2194,13 @@ function initBurger() {
   const menu      = document.getElementById('burger-menu');
   const overlay   = document.getElementById('burger-overlay');
 
-  function open()  { menu?.classList.add('open'); overlay?.classList.remove('hidden'); }
+  function open()  {
+    menu?.classList.add('open');
+    overlay?.classList.remove('hidden');
+    // Скрываем Сдаться если не в игре
+    const surrender = document.getElementById('burger-surrender');
+    if (surrender) surrender.style.display = ['game','waiting','placement'].includes(currentScreen) ? '' : 'none';
+  }
   function close() { menu?.classList.remove('open'); overlay?.classList.add('hidden'); }
 
   btn?.addEventListener('click', () => menu?.classList.contains('open') ? close() : open());
@@ -2248,19 +2254,18 @@ function initBurger() {
 
 function updateBurgerSound() {
   const btn  = document.getElementById('burger-sound');
-  const icon = document.getElementById('burger-sound-icon');
   if (!btn) return;
   const muted = !App.settings.sound;
-  if (icon) icon.textContent = muted ? '🔇' : '🔊';
   btn.classList.toggle('muted', muted);
+  // Показываем/скрываем волны в SVG иконке
+  const waves = document.getElementById('burger-sound-waves');
+  if (waves) waves.style.display = muted ? 'none' : '';
 }
 
 function updateBurgerEnemyMoves() {
   const btn  = document.getElementById('burger-enemy-moves');
-  const icon = document.getElementById('burger-enemy-moves-icon');
   if (!btn) return;
   const on = App.settings.showEnemyMoves !== false;
-  if (icon) icon.textContent = on ? '👁' : '🙈';
   btn.classList.toggle('muted', !on);
 }
 
@@ -2537,7 +2542,7 @@ async function renderProfileScreen(tab) {
         document.querySelectorAll('.profile-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
         document.querySelectorAll('.profile-tab-content').forEach(el => el.classList.toggle('hidden', el.id !== 'profile-tab-' + t));
         if (t === 'stats') renderStatsScreen();
-        if (t === 'inventory') { loadShopData().then(() => renderInventory()); }
+        if (t === 'inventory') { (_shopItems.length ? Promise.resolve() : loadShopData()).then(() => renderInventory()); }
       });
     });
   }
@@ -2558,7 +2563,7 @@ async function renderProfileScreen(tab) {
         document.querySelectorAll('.profile-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
         document.querySelectorAll('.profile-tab-content').forEach(c => c.classList.toggle('hidden', c.id !== 'profile-tab-' + t));
         if (t === 'stats') renderStatsScreen();
-        if (t === 'inventory') { loadShopData().then(() => renderInventory()); }
+        if (t === 'inventory') { (_shopItems.length ? Promise.resolve() : loadShopData()).then(() => renderInventory()); }
       });
     });
     document.getElementById('profile-stats-mode-toggle')?.addEventListener('click', e => {
@@ -3002,9 +3007,15 @@ async function loadShopData() {
       _shopInventory = {};
       (invRes.data.items || []).forEach(i => { _shopInventory[i.item_id] = true; });
       _shopEquipped  = invRes.data.equipped || {};
-      // Применяем тему из инвентаря
-      applyEquippedThemeFromState();
-      saveThemeToStorage(_shopEquipped['theme'] || null);
+      // Применяем тему — берём из localStorage если она уже применена (не перебиваем)
+      const storedTheme = (() => { try { return localStorage.getItem('equippedTheme'); } catch(e) { return null; } })();
+      const serverTheme = _shopEquipped['theme'] || null;
+      // Если localStorage и сервер расходятся — доверяем серверу и обновляем
+      if (storedTheme !== serverTheme) {
+        saveThemeToStorage(serverTheme);
+        resetTheme();
+        if (serverTheme) applyEquippedTheme(serverTheme);
+      }
     }
   } catch(e) {
     console.error('[Shop] loadShopData error:', e);
@@ -3223,8 +3234,11 @@ function onItemRevoked(data) {
 function initShop() {
   // Кнопка Магазин в главном меню — загружаем данные при входе
   document.getElementById('btn-shop')?.addEventListener('click', async () => {
-    document.getElementById('shop-grid').innerHTML = '<div class="shop-loading">Загрузка...</div>';
-    await loadShopData();
+    // Если товары уже загружены — просто рендерим, не перезагружаем инвентарь
+    if (!_shopItems.length) {
+      document.getElementById('shop-grid').innerHTML = '<div class="shop-loading">Загрузка...</div>';
+      await loadShopData();
+    }
     renderShopGrid();
   });
 
@@ -3246,7 +3260,16 @@ function initShop() {
 
 /* ─── ФЕЙКОВЫЕ ПРЕВЬЮ (временные SVG) ───────────────────────────────────── */
 // Временные превью — используется пока нет реальных файлов
-const FAKE_PREVIEWS = {};
+const FAKE_PREVIEWS = {
+  theme_dark: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" rx="12" fill="#111111"/>
+    <rect x="8" y="8" width="84" height="84" rx="10" fill="#1e1e1e"/>
+    <rect x="20" y="30" width="60" height="8" rx="4" fill="#333"/>
+    <rect x="20" y="46" width="42" height="8" rx="4" fill="#333"/>
+    <rect x="20" y="62" width="52" height="8" rx="4" fill="#333"/>
+    <circle cx="75" cy="30" r="10" fill="#e0e0e0" opacity=".15"/>
+  </svg>`,
+};
 
 // Патчим getPreviewHtml — возвращает inline SVG если есть фейк, иначе img
 function getItemPreviewHtml(item, large = false) {
@@ -3267,9 +3290,12 @@ function renderInventory() {
   const emptyEl  = document.getElementById('inventory-empty');
   if (!grid) return;
 
-  const owned = _shopItems.filter(i => !!_shopInventory[i.id]);
+  // Тёмная тема всегда в инвентаре для авторизованных
+  const darkTheme = { id: 'theme_dark', type: 'theme', name: 'Тёмная тема', description: 'Стандартная тёмная цветовая схема' };
+  const ownedIds  = new Set(Object.keys(_shopInventory));
+  const owned     = [darkTheme, ..._shopItems.filter(i => ownedIds.has(i.id))];
 
-  if (!owned.length) {
+  if (owned.length <= 1 && !ownedIds.size) {
     grid.innerHTML = '';
     emptyEl?.classList.remove('hidden');
     return;
@@ -3284,42 +3310,79 @@ function renderInventory() {
   }
 
   grid.innerHTML = filtered.map(item => {
-    const equipped = Object.values(_shopEquipped).includes(item.id);
+    const equippedTheme = _shopEquipped['theme'] || null;
+    const equipped = item.id === 'theme_dark'
+      ? !equippedTheme  // тёмная = активна когда нет другой темы
+      : Object.values(_shopEquipped).includes(item.id);
     const cls = equipped ? 'shop-card equipped' : 'shop-card owned';
     return `<div class="${cls}" data-inv-item="${item.id}">
       <div class="shop-card-preview">${getItemPreviewHtml(item)}</div>
       <div class="shop-card-body">
         <div class="shop-card-type">${ITEM_TYPE_LABELS[item.type] || item.type}</div>
         <div class="shop-card-name">${item.name}</div>
-        <button class="shop-card-action ${equipped ? 'applied' : ''}" data-inv-action="${item.id}">
-          ${equipped ? 'Применено' : 'Применить'}
-        </button>
+        ${equipped ? '<button class="shop-card-action applied">Применено</button>' : `<button class="shop-card-action" data-inv-action="${item.id}">Применить</button>`}
       </div>
     </div>`;
   }).join('');
+
+  // Клик по карточке — открыть страницу в магазине (кроме theme_dark)
+  grid.querySelectorAll('[data-inv-item]').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.closest('[data-inv-action]')) return; // клик по кнопке — не открывать
+      const id = card.dataset.invItem;
+      if (id === 'theme_dark') return;
+      // Загружаем магазин если нужно, потом открываем товар
+      (_shopItems.length ? Promise.resolve() : loadShopData()).then(() => {
+        showScreen('shop-item');
+        openShopItem(id);
+      });
+    });
+  });
 
   // Клики по кнопкам
   grid.querySelectorAll('[data-inv-action]').forEach(btn => {
     const itemId = btn.dataset.invAction;
     const item   = _shopItems.find(i => i.id === itemId);
     if (!item) return;
-    const equipped = Object.values(_shopEquipped).includes(itemId);
+    const equippedTheme = _shopEquipped['theme'] || null;
+    const equipped = item.id === 'theme_dark' ? !equippedTheme : Object.values(_shopEquipped).includes(itemId);
     if (equipped) return; // уже применено — не кликается
     btn.addEventListener('click', async e => {
       e.stopPropagation();
+      if (item.type === 'theme') {
+        // Сбросить текущую тему (установить тёмную) или применить новую
+        if (itemId === 'theme_dark') {
+          if (_shopEquipped['theme']) {
+            await fetch('/api/unequip', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: App.user?.id, slot: 'theme' }),
+            });
+            delete _shopEquipped['theme'];
+          }
+          saveThemeToStorage(null);
+          showLoaderOverMenu(hide => {
+            resetTheme();
+            setTimeout(() => { hide && hide(); showScreen('menu'); }, 400);
+          });
+        } else {
+          await fetch('/api/equip', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: App.user?.id, itemId }),
+          });
+          _shopEquipped[item.type] = itemId;
+          saveThemeToStorage(itemId);
+          showLoaderOverMenu(hide => {
+            applyEquippedTheme(itemId);
+            setTimeout(() => { hide && hide(); showScreen('menu'); }, 400);
+          });
+        }
+        return;
+      }
       await fetch('/api/equip', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: App.user?.id, itemId }),
       });
       _shopEquipped[item.type] = itemId;
-      if (item.type === 'theme') {
-        saveThemeToStorage(itemId);
-        showLoaderOverMenu(hide => {
-          applyEquippedTheme(itemId);
-          setTimeout(() => { hide && hide(); showScreen('menu'); }, 400);
-        });
-        return;
-      }
       renderInventory();
       renderShopGrid();
     });

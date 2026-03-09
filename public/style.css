@@ -1288,3 +1288,51 @@ body.theme-light .tg-promo-banner { border-color: rgba(0,0,0,.1); }
   border-color: rgba(255,255,255,.07);
   cursor: default;
 }
+
+/* ─── СВЕТЛАЯ ТЕМА — ДОПОЛНИТЕЛЬНЫЕ ПРАВКИ ──────── */
+
+/* Главный экран */
+body.theme-light .btn-primary { color: #111111; }
+body.theme-light .btn-ghost   { border-color: rgba(0,0,0,.25); color: #555; }
+
+/* SVG заголовок — белые пути делаем тёмными */
+body.theme-light .hero-title-svg path[fill="white"],
+body.theme-light .hero-title-svg path[fill="#fff"] { fill: #1a1a1a; }
+
+/* Профиль — активная вкладка */
+body.theme-light .profile-tab.active { color: #1a1a1a; }
+
+/* Профиль — квадрат с уровнем */
+body.theme-light .xp-ring-bg,
+body.theme-light .profile-ring-bg { fill: #d0d0d0; }
+
+/* XP прогресс-бар — светло-серый фон */
+body.theme-light .xp-progress-bar-wrap { background: #cccccc; }
+
+/* Бургер меню */
+body.theme-light .burger-menu  { background: #e8e8e8; border-left-color: rgba(0,0,0,.1); }
+body.theme-light .burger-item  { border-bottom-color: rgba(0,0,0,.07); color: #1a1a1a; }
+body.theme-light .burger-item:active { background: rgba(0,0,0,.05); }
+body.theme-light .burger-overlay { background: rgba(0,0,0,.3); }
+
+/* Переключатель поле Врага/Моё */
+body.theme-light .toggle-btn.active { color: var(--bg2); }
+
+/* Кнопка Готов к бою */
+body.theme-light #btn-ready { color: #111111; }
+
+/* Сдаться в футере */
+body.theme-light .btn-surrender-ghost { color: var(--red) !important; border-color: var(--red) !important; }
+
+/* Gameover — Реванш цвет текста как у Главное меню */
+body.theme-light #btn-rematch { color: var(--text); }
+body.theme-light #btn-rematch[disabled],
+body.theme-light .rematch-waiting { color: var(--text); }
+
+/* Приглашение друга — кнопка Отмена */
+body.theme-light .modal-btn.btn-ghost,
+body.theme-light .modal .btn-ghost { border-color: rgba(0,0,0,.25); }
+
+/* go-result-block separator */
+body.theme-light .go-result-block { border-bottom-color: rgba(0,0,0,.1); }
+
