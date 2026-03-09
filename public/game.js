@@ -2233,9 +2233,6 @@ function initBurger() {
     App.settings.showEnemyMoves = !App.settings.showEnemyMoves;
     saveJSON('bs_settings', App.settings);
     updateBurgerEnemyMoves();
-    // Обновляем текст кнопки
-    const span = document.querySelector('#burger-enemy-moves span:last-child');
-    if (span) span.textContent = App.settings.showEnemyMoves ? 'Ходы противника' : 'Ходы противника (выкл)';
   });
 
   document.getElementById('burger-stats-btn')?.addEventListener('click', () => {
@@ -2269,12 +2266,13 @@ function updateBurgerSound() {
 }
 
 function updateBurgerEnemyMoves() {
-  const btn  = document.getElementById('burger-enemy-moves');
+  const btn = document.getElementById('burger-enemy-moves');
   if (!btn) return;
   const on = App.settings.showEnemyMoves !== false;
   btn.classList.toggle('muted', !on);
-  const span = btn.querySelector('span:last-child');
-  if (span) span.textContent = on ? 'Ходы противника' : 'Ходы противника (выкл)';
+  // Меняем opacity иконки глаза
+  const svg = btn.querySelector('svg');
+  if (svg) svg.style.opacity = on ? '1' : '0.35';
 }
 
 /* ─── КНОПКА ЗВУКА В ШАПКЕ ───────────────────────── */
@@ -3044,7 +3042,7 @@ function renderShopGrid() {
     const equipped = Object.values(_shopEquipped).includes(item.id);
     const cls      = equipped ? 'shop-card equipped' : owned ? 'shop-card owned' : 'shop-card';
     const priceHtml = equipped
-      ? '<span class="shop-card-price equipped">Надето</span>'
+      ? '<span class="shop-card-price owned">✓ Куплено</span>'
       : owned
         ? '<span class="shop-card-price owned">✓ Куплено</span>'
         : item.price_stars
@@ -3313,10 +3311,10 @@ function renderInventory() {
   }
 
   grid.innerHTML = filtered.map(item => {
-    const equippedTheme = _shopEquipped['theme'] || null;
+    const activeTheme = (() => { try { return localStorage.getItem('equippedTheme'); } catch(e) { return null; } })();
     const equipped = item.id === 'theme_dark'
-      ? !equippedTheme  // тёмная = активна когда нет другой темы
-      : Object.values(_shopEquipped).includes(item.id);
+      ? !activeTheme   // тёмная = активна когда нет другой темы в localStorage
+      : (activeTheme === item.id || (!activeTheme && Object.values(_shopEquipped).includes(item.id)));
     const cls = equipped ? 'shop-card equipped' : 'shop-card owned';
     return `<div class="${cls}" data-inv-item="${item.id}">
       <div class="shop-card-preview">${getItemPreviewHtml(item)}</div>
@@ -3347,8 +3345,8 @@ function renderInventory() {
     const itemId = btn.dataset.invAction;
     const item   = _shopItems.find(i => i.id === itemId);
     if (!item) return;
-    const equippedTheme = _shopEquipped['theme'] || null;
-    const equipped = item.id === 'theme_dark' ? !equippedTheme : Object.values(_shopEquipped).includes(itemId);
+    const activeTheme = (() => { try { return localStorage.getItem('equippedTheme'); } catch(e) { return null; } })();
+    const equipped = item.id === 'theme_dark' ? !activeTheme : (activeTheme === itemId || Object.values(_shopEquipped).includes(itemId));
     if (equipped) return; // уже применено — не кликается
     btn.addEventListener('click', async e => {
       e.stopPropagation();
@@ -3430,7 +3428,7 @@ renderShopGrid = function() {
     const equipped = Object.values(_shopEquipped).includes(item.id);
     const cls      = equipped ? 'shop-card equipped' : owned ? 'shop-card owned' : 'shop-card';
     const priceHtml = equipped
-      ? '<span class="shop-card-price equipped">Надето</span>'
+      ? '<span class="shop-card-price owned">✓ Куплено</span>'
       : owned
         ? '<span class="shop-card-price owned">✓ Куплено</span>'
         : item.price_stars
