@@ -1041,7 +1041,7 @@ app.post('/api/shop/buy', async (req, res) => {
         payload,
         currency: 'XTR',               // Telegram Stars
         prices: [{ label: item.name, amount: item.price_stars }],
-        photo_url: item.preview_url ? `${req.protocol}://${req.get('host')}${item.preview_url}` : undefined,
+        // photo_url не передаём — TG принимает только JPEG/PNG, не SVG
       })
     });
     const tgJson = await tgRes.json();
