@@ -19,6 +19,8 @@ const DB_PATH     = process.env.DB_PATH     || './data/game.db';
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 const BOT_USERNAME = process.env.BOT_USERNAME || '';
 const APP_NAME     = process.env.APP_NAME     || 'bteship';
+const BOT_TOKEN    = process.env.BOT_TOKEN    || '';
+const SHOP_SECRET  = process.env.SHOP_SECRET  || 'shop_secret_change_me'; // для внутренних наград
 
 const TURN_TIMEOUT_MS = 60000; // 60 сек на ход
 const MAX_TIMEOUTS    = 2;     // 2 просрочки = поражение
@@ -85,6 +87,118 @@ db.exec(`
   );
 `);
 try { db.exec(`ALTER TABLE battle_history ADD COLUMN mode TEXT DEFAULT 'online'`); } catch(e) {}
+
+// ─── МАГАЗИН ──────────────────────────────────────────────────────────────────
+
+// Каталог товаров
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shop_items (
+    id           TEXT PRIMARY KEY,
+    type         TEXT NOT NULL,      -- 'frame'|'theme'|'reaction'|'title'
+    name         TEXT NOT NULL,
+    description  TEXT,
+    price_stars  INTEGER,            -- null = бесплатный/наградной
+    preview_url  TEXT,
+    sort_order   INTEGER DEFAULT 0,
+    is_active    INTEGER DEFAULT 1   -- 0 = скрыт из магазина
+  );
+`);
+
+// Инвентарь игрока
+db.exec(`
+  CREATE TABLE IF NOT EXISTS inventory (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id            TEXT NOT NULL,
+    item_id            TEXT NOT NULL REFERENCES shop_items(id),
+    purchase_type      TEXT NOT NULL,  -- 'stars'|'reward'|'admin'
+    telegram_charge_id TEXT,           -- payload от TG для обработки рефандов
+    purchased_at       INTEGER DEFAULT (strftime('%s','now')),
+    refunded_at        INTEGER,        -- заполняется при рефанде
+    is_active          INTEGER DEFAULT 1,  -- 0 = заблокирован после рефанда
+    UNIQUE(user_id, item_id)
+  );
+`);
+
+// Экипировка — что сейчас надето по слотам
+db.exec(`
+  CREATE TABLE IF NOT EXISTS equipped (
+    user_id  TEXT NOT NULL,
+    slot     TEXT NOT NULL,   -- 'frame'|'theme'|'reaction'|'title'
+    item_id  TEXT NOT NULL REFERENCES shop_items(id),
+    PRIMARY KEY (user_id, slot)
+  );
+`);
+
+// Pending invoices — ждём подтверждения от TG
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pending_invoices (
+    payload      TEXT PRIMARY KEY,    -- уникальный payload который мы шлём в TG
+    user_id      TEXT NOT NULL,
+    item_id      TEXT NOT NULL,
+    price_stars  INTEGER NOT NULL,
+    created_at   INTEGER DEFAULT (strftime('%s','now')),
+    status       TEXT DEFAULT 'pending'  -- 'pending'|'paid'|'failed'
+  );
+`);
+
+// Seed — базовые товары если таблица пустая
+const itemCount = db.prepare('SELECT COUNT(*) as c FROM shop_items').get().c;
+if (itemCount === 0) {
+  const seedItems = [
+    // Рамки
+    { id: 'frame_gold',    type: 'frame',    name: 'Золотая рамка',    description: 'Классическая золотая рамка для аватарки',  price_stars: 50,  preview_url: '/shop/previews/frame_gold.svg',    sort_order: 10 },
+    { id: 'frame_neon',    type: 'frame',    name: 'Неоновая рамка',   description: 'Яркая неоновая рамка с эффектом свечения', price_stars: 75,  preview_url: '/shop/previews/frame_neon.svg',    sort_order: 11 },
+    // Цветовые схемы
+    { id: 'theme_ocean',   type: 'theme',    name: 'Океан',            description: 'Глубокая синяя цветовая схема',            price_stars: 100, preview_url: '/shop/previews/theme_ocean.svg',   sort_order: 20 },
+    { id: 'theme_fire',    type: 'theme',    name: 'Огонь',            description: 'Огненная красно-оранжевая схема',          price_stars: 100, preview_url: '/shop/previews/theme_fire.svg',    sort_order: 21 },
+    // Реакции
+    { id: 'reaction_boom', type: 'reaction', name: 'Бум!',             description: 'Взрыв при попадании',                     price_stars: 30,  preview_url: '/shop/previews/reaction_boom.svg', sort_order: 30 },
+    { id: 'reaction_rip',  type: 'reaction', name: 'RIP',              description: 'Надгробие при потоплении корабля',         price_stars: 30,  preview_url: '/shop/previews/reaction_rip.svg',  sort_order: 31 },
+    // Звания
+    { id: 'title_admiral', type: 'title',    name: 'Адмирал флота',    description: 'Эксклюзивное звание для лучших',           price_stars: 200, preview_url: '/shop/previews/title_admiral.svg', sort_order: 40 },
+    { id: 'title_pirate',  type: 'title',    name: 'Пират',            description: 'Вольный морской волк',                    price_stars: 150, preview_url: '/shop/previews/title_pirate.svg',  sort_order: 41 },
+  ];
+  const insertItem = db.prepare(`INSERT OR IGNORE INTO shop_items (id,type,name,description,price_stars,preview_url,sort_order) VALUES (?,?,?,?,?,?,?)`);
+  for (const it of seedItems) insertItem.run(it.id, it.type, it.name, it.description, it.price_stars, it.preview_url, it.sort_order);
+  console.log('[Shop] Seed items inserted');
+}
+
+// Хелперы магазина
+function getInventory(userId) {
+  return db.prepare(`
+    SELECT i.*, s.type, s.name, s.description, s.preview_url,
+           e.slot IS NOT NULL as is_equipped
+    FROM inventory i
+    JOIN shop_items s ON s.id = i.item_id
+    LEFT JOIN equipped e ON e.user_id = i.user_id AND e.item_id = i.item_id
+    WHERE i.user_id = ? AND i.is_active = 1
+    ORDER BY i.purchased_at DESC
+  `).all(userId);
+}
+
+function getEquipped(userId) {
+  const rows = db.prepare(`SELECT slot, item_id FROM equipped WHERE user_id = ?`).all(userId);
+  const result = {};
+  for (const r of rows) result[r.slot] = r.item_id;
+  return result;
+}
+
+function hasItem(userId, itemId) {
+  return !!db.prepare(`SELECT 1 FROM inventory WHERE user_id=? AND item_id=? AND is_active=1`).get(userId, itemId);
+}
+
+function grantItem(userId, itemId, purchaseType, chargeId = null) {
+  try {
+    db.prepare(`
+      INSERT OR IGNORE INTO inventory (user_id, item_id, purchase_type, telegram_charge_id)
+      VALUES (?, ?, ?, ?)
+    `).run(userId, itemId, purchaseType, chargeId);
+    return true;
+  } catch(e) {
+    console.error('[Shop] grantItem error:', e.message);
+    return false;
+  }
+}
 
 // Чистим гостей
 try { db.prepare(`DELETE FROM players WHERE id LIKE 'guest_%'`).run(); } catch(e) {}
@@ -855,6 +969,206 @@ app.get('/api/duel/:myId/:theirId', (req, res) => {
   catch(e) { res.status(500).json({ ok: false }); }
 });
 app.get('/api/status',     (req, res) => res.json({ ok: true, rooms: rooms.size, waiting: waitingPool.length, uptime: process.uptime() }));
+
+
+// Уведомить пользователя через WebSocket если он онлайн
+function notifyUser(userId, event, data) {
+  for (const [, session] of onlineSessions) {
+    if (session.playerId === userId) {
+      io.to(session.socketId).emit(event, data);
+      break;
+    }
+  }
+}
+
+// ─── SHOP API ────────────────────────────────────────────────────────────────
+
+// Каталог магазина (все активные товары)
+app.get('/api/shop/items', (req, res) => {
+  try {
+    const items = db.prepare(`SELECT * FROM shop_items WHERE is_active=1 ORDER BY sort_order`).all();
+    res.json({ ok: true, data: items });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Страница конкретного товара
+app.get('/api/shop/item/:id', (req, res) => {
+  try {
+    const item = db.prepare(`SELECT * FROM shop_items WHERE id=?`).get(req.params.id);
+    if (!item) return res.status(404).json({ ok: false, error: 'not found' });
+    res.json({ ok: true, data: item });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Инвентарь игрока + текущая экипировка
+app.get('/api/inventory/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId || userId.startsWith('guest_')) return res.json({ ok: true, data: { items: [], equipped: {} } });
+    res.json({ ok: true, data: { items: getInventory(userId), equipped: getEquipped(userId) } });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Создать invoice для покупки за Stars
+app.post('/api/shop/buy', async (req, res) => {
+  try {
+    const { userId, itemId } = req.body;
+    if (!userId || !itemId) return res.status(400).json({ ok: false, error: 'missing params' });
+    if (userId.startsWith('guest_')) return res.status(403).json({ ok: false, error: 'guests cannot buy' });
+    if (!BOT_TOKEN) return res.status(503).json({ ok: false, error: 'payments not configured' });
+
+    const item = db.prepare(`SELECT * FROM shop_items WHERE id=? AND is_active=1`).get(itemId);
+    if (!item) return res.status(404).json({ ok: false, error: 'item not found' });
+    if (!item.price_stars) return res.status(400).json({ ok: false, error: 'item is not for sale' });
+
+    // Уже куплен?
+    if (hasItem(userId, itemId)) return res.status(409).json({ ok: false, error: 'already owned' });
+
+    // Уникальный payload для этой транзакции
+    const payload = `${userId}:${itemId}:${Date.now()}`;
+
+    // Сохраняем pending invoice
+    db.prepare(`INSERT OR REPLACE INTO pending_invoices (payload, user_id, item_id, price_stars) VALUES (?,?,?,?)`)
+      .run(payload, userId, itemId, item.price_stars);
+
+    // Создаём invoice через Telegram Bot API
+    const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: item.name,
+        description: item.description || item.name,
+        payload,
+        currency: 'XTR',               // Telegram Stars
+        prices: [{ label: item.name, amount: item.price_stars }],
+        photo_url: item.preview_url ? `${req.protocol}://${req.get('host')}${item.preview_url}` : undefined,
+      })
+    });
+    const tgJson = await tgRes.json();
+    if (!tgJson.ok) {
+      console.error('[Shop] TG invoice error:', tgJson);
+      return res.status(502).json({ ok: false, error: 'telegram error', detail: tgJson.description });
+    }
+
+    res.json({ ok: true, invoiceUrl: tgJson.result });
+  } catch(e) {
+    console.error('[Shop] buy error:', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Webhook от Telegram Bot (successful_payment + refunded_payment)
+app.post('/api/webhook/telegram', express.json(), (req, res) => {
+  try {
+    // Проверяем секрет — запросы только от нашего Python бота
+    const secret = req.headers['x-shop-secret'];
+    if (SHOP_SECRET && secret !== SHOP_SECRET) {
+      console.warn('[Shop] webhook: invalid secret');
+      return res.status(403).json({ ok: false, error: 'forbidden' });
+    }
+
+    const update = req.body;
+    res.json({ ok: true }); // отвечаем сразу, обрабатываем асинхронно
+
+    const msg = update.message;
+    if (!msg) return;
+
+    // _user_id — нормализованный id, который передаёт Python бот
+    const userId = msg._user_id ? String(msg._user_id) : null;
+
+    // ── Успешная оплата ────────────────────────────────────────────────────
+    if (msg.successful_payment) {
+      const sp       = msg.successful_payment;
+      const payload  = sp.invoice_payload;
+      const chargeId = sp.telegram_payment_charge_id;
+
+      const invoice = db.prepare(`SELECT * FROM pending_invoices WHERE payload=?`).get(payload);
+      if (!invoice) {
+        console.error(`[Shop] Unknown payload: ${payload}`);
+        return;
+      }
+
+      // Дополнительная проверка: user в payload совпадает с тем кто платил
+      if (userId && invoice.user_id !== userId) {
+        console.error(`[Shop] User mismatch: invoice=${invoice.user_id} actual=${userId}`);
+        return;
+      }
+
+      grantItem(invoice.user_id, invoice.item_id, 'stars', chargeId);
+      db.prepare(`UPDATE pending_invoices SET status='paid' WHERE payload=?`).run(payload);
+      console.log(`[Shop] ✅ Purchased: user=${invoice.user_id} item=${invoice.item_id} charge=${chargeId}`);
+
+      notifyUser(invoice.user_id, 'purchase_complete', { itemId: invoice.item_id });
+    }
+
+    // ── Рефанд (до 21 дня, инициирует пользователь через TG) ──────────────
+    if (msg.refunded_payment) {
+      const chargeId = msg.refunded_payment.telegram_payment_charge_id;
+      const inv = db.prepare(`SELECT * FROM inventory WHERE telegram_charge_id=?`).get(chargeId);
+
+      if (inv) {
+        db.prepare(`
+          UPDATE inventory SET is_active=0, refunded_at=strftime('%s','now')
+          WHERE telegram_charge_id=?
+        `).run(chargeId);
+
+        const item = db.prepare(`SELECT type FROM shop_items WHERE id=?`).get(inv.item_id);
+        if (item) {
+          db.prepare(`DELETE FROM equipped WHERE user_id=? AND slot=? AND item_id=?`)
+            .run(inv.user_id, item.type, inv.item_id);
+        }
+
+        console.log(`[Shop] 🔄 Refunded: user=${inv.user_id} item=${inv.item_id} charge=${chargeId}`);
+        notifyUser(inv.user_id, 'item_revoked', { itemId: inv.item_id });
+      } else {
+        console.warn(`[Shop] Refund for unknown charge: ${chargeId}`);
+      }
+    }
+
+  } catch(e) { console.error('[Shop] webhook error:', e); }
+});
+
+// Экипировать айтем (надеть/активировать)
+app.post('/api/equip', (req, res) => {
+  try {
+    const { userId, itemId } = req.body;
+    if (!userId || !itemId) return res.status(400).json({ ok: false, error: 'missing params' });
+    if (!hasItem(userId, itemId)) return res.status(403).json({ ok: false, error: 'not owned' });
+
+    const item = db.prepare(`SELECT * FROM shop_items WHERE id=?`).get(itemId);
+    if (!item) return res.status(404).json({ ok: false, error: 'item not found' });
+
+    // INSERT OR REPLACE — один слот = один айтем
+    db.prepare(`INSERT OR REPLACE INTO equipped (user_id, slot, item_id) VALUES (?,?,?)`)
+      .run(userId, item.type, itemId);
+
+    res.json({ ok: true, slot: item.type, itemId });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Снять экипировку со слота
+app.post('/api/unequip', (req, res) => {
+  try {
+    const { userId, slot } = req.body;
+    if (!userId || !slot) return res.status(400).json({ ok: false, error: 'missing params' });
+    db.prepare(`DELETE FROM equipped WHERE user_id=? AND slot=?`).run(userId, slot);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Выдать товар за действие (внутренний — защищён секретом)
+app.post('/api/reward', (req, res) => {
+  try {
+    const { secret, userId, itemId, reason } = req.body;
+    if (secret !== SHOP_SECRET) return res.status(403).json({ ok: false, error: 'forbidden' });
+    if (!userId || !itemId) return res.status(400).json({ ok: false, error: 'missing params' });
+    if (hasItem(userId, itemId)) return res.json({ ok: true, already: true });
+
+    grantItem(userId, itemId, 'reward');
+    console.log(`[Shop] Reward granted: user=${userId} item=${itemId} reason=${reason}`);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
 
 // Фронтенд — обязательно В САМОМ КОНЦЕ, после всех API
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
