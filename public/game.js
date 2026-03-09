@@ -3130,7 +3130,13 @@ async function handleShopItemBtn() {
       body: JSON.stringify({ userId: App.user?.id, slot: item.type }),
     });
     delete _shopEquipped[item.type];
-    if (item.type === 'theme') { resetTheme(); saveThemeToStorage(null); }
+    if (item.type === 'theme') {
+      resetTheme();
+      saveThemeToStorage(null);
+      showLoaderOverMenu(hide => {
+        setTimeout(() => { hide && hide(); showScreen('menu'); }, 400);
+      });
+    }
     openShopItem(itemId);
     renderShopGrid();
     return;
@@ -3142,7 +3148,13 @@ async function handleShopItemBtn() {
       body: JSON.stringify({ userId: App.user?.id, itemId }),
     });
     _shopEquipped[item.type] = itemId;
-    if (item.type === 'theme') { applyEquippedTheme(itemId); saveThemeToStorage(itemId); }
+    if (item.type === 'theme') {
+      saveThemeToStorage(itemId);
+      showLoaderOverMenu(hide => {
+        applyEquippedTheme(itemId);
+        setTimeout(() => { hide && hide(); showScreen('menu'); }, 400);
+      });
+    }
     openShopItem(itemId);
     renderShopGrid();
     return;
@@ -3300,6 +3312,14 @@ function renderInventory() {
         body: JSON.stringify({ userId: App.user?.id, itemId }),
       });
       _shopEquipped[item.type] = itemId;
+      if (item.type === 'theme') {
+        saveThemeToStorage(itemId);
+        showLoaderOverMenu(hide => {
+          applyEquippedTheme(itemId);
+          setTimeout(() => { hide && hide(); showScreen('menu'); }, 400);
+        });
+        return;
+      }
       renderInventory();
       renderShopGrid();
     });
