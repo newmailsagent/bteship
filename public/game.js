@@ -3160,6 +3160,14 @@ async function handleShopItemBtn() {
 
     if (btnEl) { btnEl.textContent = 'Купить'; btnEl.disabled = false; }
 
+    if (res.ok && res.free) {
+      // Админ — выдано бесплатно
+      _shopInventory[itemId] = true;
+      openShopItem(itemId);
+      renderShopGrid();
+      return;
+    }
+
     if (res.ok && res.invoiceUrl) {
       if (window.Telegram?.WebApp?.openInvoice) {
         // Внутри Telegram Mini App

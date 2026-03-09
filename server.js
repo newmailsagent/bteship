@@ -21,6 +21,9 @@ const BOT_USERNAME = process.env.BOT_USERNAME || '';
 const APP_NAME     = process.env.APP_NAME     || 'bteship';
 const BOT_TOKEN    = process.env.BOT_TOKEN    || '';
 const SHOP_SECRET  = process.env.SHOP_SECRET  || 'shop_secret_change_me'; // для внутренних наград
+const ADMIN_IDS    = new Set((process.env.ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
+
+function isAdmin(userId) { return ADMIN_IDS.has(String(userId)); }
 
 const TURN_TIMEOUT_MS = 60000; // 60 сек на ход
 const MAX_TIMEOUTS    = 2;     // 2 просрочки = поражение
@@ -1003,6 +1006,14 @@ app.get('/api/inventory/:userId', (req, res) => {
   try {
     const { userId } = req.params;
     if (!userId || userId.startsWith('guest_')) return res.json({ ok: true, data: { items: [], equipped: {} } });
+
+    // Админ — весь каталог как купленный
+    if (isAdmin(userId)) {
+      const allItems = db.prepare(`SELECT * FROM shop_items WHERE is_active=1 ORDER BY sort_order`).all();
+      const fakeInv  = allItems.map(i => ({ ...i, item_id: i.id, purchase_type: 'admin', is_active: 1, is_equipped: 0 }));
+      return res.json({ ok: true, data: { items: fakeInv, equipped: getEquipped(userId) } });
+    }
+
     res.json({ ok: true, data: { items: getInventory(userId), equipped: getEquipped(userId) } });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -1014,6 +1025,12 @@ app.post('/api/shop/buy', async (req, res) => {
     if (!userId || !itemId) return res.status(400).json({ ok: false, error: 'missing params' });
     if (userId.startsWith('guest_')) return res.status(403).json({ ok: false, error: 'guests cannot buy' });
     if (!BOT_TOKEN) return res.status(503).json({ ok: false, error: 'payments not configured' });
+
+    // Админ — выдаём бесплатно
+    if (isAdmin(userId)) {
+      grantItem(userId, itemId, 'admin');
+      return res.json({ ok: true, free: true });
+    }
 
     const item = db.prepare(`SELECT * FROM shop_items WHERE id=? AND is_active=1`).get(itemId);
     if (!item) return res.status(404).json({ ok: false, error: 'item not found' });
