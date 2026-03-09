@@ -2189,14 +2189,16 @@ function startBotGame(mode) {
 
 /* ─── БУРГЕР-МЕНЮ ────────────────────────────────── */
 function initBurger() {
-  const btn    = document.getElementById('burger-btn');
-  const menu   = document.getElementById('burger-menu');
-  const overlay= document.getElementById('burger-overlay');
+  const btn       = document.getElementById('burger-btn');       // бургер в игре
+  const btnMenu   = document.getElementById('btn-burger-menu');  // бургер в главном меню
+  const menu      = document.getElementById('burger-menu');
+  const overlay   = document.getElementById('burger-overlay');
 
   function open()  { menu?.classList.add('open'); overlay?.classList.remove('hidden'); }
   function close() { menu?.classList.remove('open'); overlay?.classList.add('hidden'); }
 
   btn?.addEventListener('click', () => menu?.classList.contains('open') ? close() : open());
+  btnMenu?.addEventListener('click', () => menu?.classList.contains('open') ? close() : open());
   overlay?.addEventListener('click', close);
 
   document.getElementById('burger-surrender')?.addEventListener('click', () => {
@@ -2913,6 +2915,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   updateBurgerEnemyMoves();
   initSwipeBack();
   initOnlineCounter();
+  initShop();
+
+  // WebSocket события магазина
+  socket.on('purchase_complete', onPurchaseComplete);
+  socket.on('item_revoked',      onItemRevoked);
 
   // Анимируем прогресс лоадера пока грузим данные с сервера
   startLoadingCellAnim();
@@ -2958,3 +2965,235 @@ window.addEventListener('DOMContentLoaded', async () => {
     }, 400);
   }
 });
+
+/* ─── МАГАЗИН ────────────────────────────────────── */
+
+const ITEM_TYPE_LABELS = {
+  frame:    'Рамка',
+  theme:    'Тема',
+  reaction: 'Реакция',
+  title:    'Звание',
+};
+
+let _shopItems     = [];   // весь каталог
+let _shopInventory = {};   // { itemId: true } — что куплено
+let _shopEquipped  = {};   // { slot: itemId } — что надето
+let _shopFilter    = 'all';
+let _currentShopItemId = null;
+
+// Загрузить каталог и инвентарь
+async function loadShopData() {
+  try {
+    const [itemsRes, invRes] = await Promise.all([
+      fetch('/api/shop/items').then(r => r.json()),
+      currentPlayerId && !currentPlayerId.startsWith('guest_')
+        ? fetch(`/api/inventory/${currentPlayerId}`).then(r => r.json())
+        : Promise.resolve({ ok: true, data: { items: [], equipped: {} } }),
+    ]);
+    if (itemsRes.ok)  _shopItems = itemsRes.data || [];
+    if (invRes.ok) {
+      _shopInventory = {};
+      (invRes.data.items || []).forEach(i => { _shopInventory[i.item_id] = true; });
+      _shopEquipped  = invRes.data.equipped || {};
+    }
+  } catch(e) {
+    console.error('[Shop] loadShopData error:', e);
+  }
+}
+
+// Отрисовать карточки с учётом фильтра
+function renderShopGrid() {
+  const grid = document.getElementById('shop-grid');
+  if (!grid) return;
+
+  const items = _shopFilter === 'all'
+    ? _shopItems
+    : _shopItems.filter(i => i.type === _shopFilter);
+
+  if (!items.length) {
+    grid.innerHTML = '<div class="shop-loading">Нет товаров</div>';
+    return;
+  }
+
+  grid.innerHTML = items.map(item => {
+    const owned    = !!_shopInventory[item.id];
+    const equipped = Object.values(_shopEquipped).includes(item.id);
+    const cls      = equipped ? 'shop-card equipped' : owned ? 'shop-card owned' : 'shop-card';
+    const priceHtml = equipped
+      ? '<span class="shop-card-price equipped">Надето</span>'
+      : owned
+        ? '<span class="shop-card-price owned">✓ Куплено</span>'
+        : item.price_stars
+          ? `<span class="shop-card-price">⭐ ${item.price_stars}</span>`
+          : '<span class="shop-card-price owned">Бесплатно</span>';
+    const preview = item.preview_url
+      ? `<img src="${item.preview_url}" alt="${item.name}" loading="lazy">`
+      : '🎁';
+
+    return `<div class="${cls}" data-item-id="${item.id}">
+      <div class="shop-card-preview">${preview}</div>
+      <div class="shop-card-body">
+        <div class="shop-card-type">${ITEM_TYPE_LABELS[item.type] || item.type}</div>
+        <div class="shop-card-name">${item.name}</div>
+        ${priceHtml}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Клик по карточке — открыть страницу товара
+  grid.querySelectorAll('.shop-card').forEach(card => {
+    card.addEventListener('click', () => openShopItem(card.dataset.itemId));
+  });
+}
+
+// Открыть страницу товара
+function openShopItem(itemId) {
+  const item = _shopItems.find(i => i.id === itemId);
+  if (!item) return;
+  _currentShopItemId = itemId;
+
+  const owned    = !!_shopInventory[itemId];
+  const equipped = Object.values(_shopEquipped).includes(itemId);
+
+  document.getElementById('shop-item-title').textContent = item.name;
+  document.getElementById('shop-item-name').textContent  = item.name;
+  document.getElementById('shop-item-desc').textContent  = item.description || '';
+  document.getElementById('shop-item-type-badge').textContent = ITEM_TYPE_LABELS[item.type] || item.type;
+
+  // Превью
+  const previewEl = document.getElementById('shop-item-preview-lg');
+  previewEl.innerHTML = item.preview_url
+    ? `<img src="${item.preview_url}" alt="${item.name}">`
+    : '🎁';
+
+  // Цена и статус
+  const priceEl  = document.getElementById('shop-item-price');
+  const statusEl = document.getElementById('shop-item-status');
+  const btnEl    = document.getElementById('shop-item-btn');
+
+  if (equipped) {
+    priceEl.textContent  = '';
+    statusEl.textContent = '✓ Надето';
+    btnEl.textContent    = 'Снять';
+    btnEl.className      = 'btn btn-secondary btn-large';
+  } else if (owned) {
+    priceEl.textContent  = '';
+    statusEl.textContent = '✓ Куплено';
+    btnEl.textContent    = 'Надеть';
+    btnEl.className      = 'btn btn-primary btn-large';
+  } else if (item.price_stars) {
+    priceEl.textContent  = `⭐ ${item.price_stars} звёзд`;
+    statusEl.textContent = '';
+    btnEl.textContent    = 'Купить';
+    btnEl.className      = 'btn btn-primary btn-large';
+  } else {
+    priceEl.textContent  = 'Бесплатно';
+    statusEl.textContent = '';
+    btnEl.textContent    = 'Получить';
+    btnEl.className      = 'btn btn-primary btn-large';
+  }
+
+  // Кнопка назад возвращает в магазин
+  document.getElementById('shop-item-back').onclick = () => showScreen('shop', { isBack: true });
+
+  showScreen('shop-item');
+}
+
+// Действие кнопки на странице товара
+async function handleShopItemBtn() {
+  const itemId = _currentShopItemId;
+  const item   = _shopItems.find(i => i.id === itemId);
+  if (!item || !currentPlayerId || currentPlayerId.startsWith('guest_')) return;
+
+  const owned    = !!_shopInventory[itemId];
+  const equipped = Object.values(_shopEquipped).includes(itemId);
+
+  if (equipped) {
+    // Снять
+    await fetch('/api/unequip', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentPlayerId, slot: item.type }),
+    });
+    delete _shopEquipped[item.type];
+    openShopItem(itemId);
+    renderShopGrid();
+    return;
+  }
+
+  if (owned) {
+    // Надеть
+    await fetch('/api/equip', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentPlayerId, itemId }),
+    });
+    _shopEquipped[item.type] = itemId;
+    openShopItem(itemId);
+    renderShopGrid();
+    return;
+  }
+
+  // Купить — создаём invoice и открываем через TG
+  try {
+    const res = await fetch('/api/shop/buy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentPlayerId, itemId }),
+    }).then(r => r.json());
+
+    if (res.ok && res.invoiceUrl) {
+      window.Telegram?.WebApp?.openInvoice(res.invoiceUrl, status => {
+        if (status === 'paid') {
+          _shopInventory[itemId] = true;
+          openShopItem(itemId);
+          renderShopGrid();
+        }
+      });
+    } else {
+      console.error('[Shop] buy error:', res);
+    }
+  } catch(e) {
+    console.error('[Shop] buy exception:', e);
+  }
+}
+
+// WebSocket — товар куплен (пришло с сервера)
+function onPurchaseComplete(data) {
+  _shopInventory[data.itemId] = true;
+  renderShopGrid();
+}
+
+// WebSocket — товар отозван (рефанд)
+function onItemRevoked(data) {
+  delete _shopInventory[data.itemId];
+  const slot = Object.keys(_shopEquipped).find(k => _shopEquipped[k] === data.itemId);
+  if (slot) delete _shopEquipped[slot];
+  renderShopGrid();
+}
+
+// Инициализация магазина
+function initShop() {
+  // Фильтры
+  document.querySelectorAll('.shop-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.shop-filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _shopFilter = btn.dataset.filter;
+      renderShopGrid();
+    });
+  });
+
+  // Кнопка действия на странице товара
+  document.getElementById('shop-item-btn')?.addEventListener('click', handleShopItemBtn);
+}
+
+// Загружаем при входе на экран магазина
+const _origShowScreen = showScreen;
+// Перехватываем переход на shop
+document.addEventListener('DOMContentLoaded', () => {
+  // Вешаем слушатель на кнопку Магазин в меню
+  document.getElementById('btn-shop')?.addEventListener('click', async () => {
+    document.getElementById('shop-grid').innerHTML = '<div class="shop-loading">Загрузка...</div>';
+    await loadShopData();
+    renderShopGrid();
+  });
+});
+

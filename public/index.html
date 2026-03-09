@@ -77,10 +77,13 @@
           <path id="sound-waves" d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>
         </svg>
       </button>
-      <div class="stats-mini">
-        <div class="stat-item"><span class="stat-val" id="stat-wins">0</span><span class="stat-lbl">побед</span></div>
-        <div class="stat-item"><span class="stat-val" id="stat-total">0</span><span class="stat-lbl">боёв</span></div>
-      </div>
+      <button class="btn-burger-menu" id="btn-burger-menu" aria-label="Меню">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <rect y="3" width="20" height="2" rx="1" fill="currentColor"/>
+          <rect y="9" width="20" height="2" rx="1" fill="currentColor"/>
+          <rect y="15" width="20" height="2" rx="1" fill="currentColor"/>
+        </svg>
+      </button>
     </div>
   </header>
   <div class="menu-hero">
@@ -144,7 +147,7 @@
       <button class="btn btn-secondary" data-screen="leaderboard">Рейтинг</button>
       <button class="btn btn-secondary" data-screen="profile">Профиль</button>
     </div>
-    <button class="btn btn-ghost" data-screen="settings">Настройки</button>
+    <button class="btn btn-ghost" id="btn-shop" data-screen="shop">Магазин</button>
   </nav>
 </div>
 
@@ -506,29 +509,64 @@
 <div id="burger-menu" class="burger-menu">
   <div class="burger-menu-header">Меню</div>
   <button class="burger-item" id="burger-sound">
-    <span id="burger-sound-icon">🔊</span>
+    <span id="burger-sound-icon"></span>
     <span>Звук</span>
   </button>
-  <!-- Ходы противника — только мобайл -->
   <button class="burger-item mobile-only" id="burger-enemy-moves">
-    <span id="burger-enemy-moves-icon">👁</span>
+    <span id="burger-enemy-moves-icon"></span>
     <span>Ходы противника</span>
   </button>
   <button class="burger-item" id="burger-stats-btn">
-    <span>📊</span>
     <span>Статистика</span>
   </button>
   <button class="burger-item" id="burger-settings-btn">
-    <span>⚙️</span>
     <span>Настройки</span>
   </button>
   <div class="burger-divider"></div>
   <button class="burger-item danger" id="burger-surrender">
-    <span>🏳️</span>
     <span>Сдаться</span>
   </button>
 </div>
 
 <script src="game.js"></script>
+
+<!-- МАГАЗИН -->
+<div id="screen-shop" class="screen">
+  <div class="page-header">
+    <button class="btn-back" data-screen="menu">← Назад</button>
+    <h2>Магазин</h2>
+  </div>
+  <div class="shop-filters">
+    <button class="shop-filter active" data-filter="all">Все</button>
+    <button class="shop-filter" data-filter="frame">Рамки</button>
+    <button class="shop-filter" data-filter="theme">Темы</button>
+    <button class="shop-filter" data-filter="reaction">Реакции</button>
+    <button class="shop-filter" data-filter="title">Звания</button>
+  </div>
+  <div class="shop-grid" id="shop-grid">
+    <div class="shop-loading">Загрузка...</div>
+  </div>
+</div>
+
+<!-- СТРАНИЦА ТОВАРА -->
+<div id="screen-shop-item" class="screen">
+  <div class="page-header">
+    <button class="btn-back" id="shop-item-back">← Назад</button>
+    <h2 id="shop-item-title">Товар</h2>
+  </div>
+  <div class="shop-item-detail">
+    <div class="shop-item-preview-lg" id="shop-item-preview-lg"></div>
+    <div class="shop-item-meta">
+      <div class="shop-item-type-badge" id="shop-item-type-badge"></div>
+      <h3 id="shop-item-name"></h3>
+      <p class="shop-item-desc" id="shop-item-desc"></p>
+      <div class="shop-item-price-row">
+        <span class="shop-item-price" id="shop-item-price"></span>
+        <span class="shop-item-status" id="shop-item-status"></span>
+      </div>
+      <button class="btn btn-primary btn-large" id="shop-item-btn">Купить</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

@@ -175,10 +175,20 @@ html, body {
 .avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 0; display: block; }
 .username { font-weight: 600; font-size: 15px; display: block; }
 .user-tag { color: var(--hint); font-size: 12px; }
-.stats-mini { display: flex; gap: 16px; }
+.stats-mini { display: none; }
 .stat-item { text-align: center; }
 .stat-val { display: block; font-family: var(--font-hd); font-size: 18px; color: var(--accent); }
 .stat-lbl { font-size: 11px; color: var(--hint); text-transform: uppercase; letter-spacing: 1px; }
+
+/* Кнопка бургера в хедере главного меню */
+.btn-burger-menu {
+  width: 36px; height: 36px;
+  background: var(--bg2); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 8px; cursor: pointer; color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: background .15s;
+}
+.btn-burger-menu:active { background: rgba(255,255,255,.12); }
 
 /* ─── МЕНЮ ───────────────────────────────────────── */
 #screen-menu { position: relative; overflow: hidden; height: 100%; }
@@ -585,6 +595,82 @@ body.theme-light .tg-promo-banner { border-color: rgba(0,0,0,.1); }
 .burger-item.muted  { color: var(--hint); }
 .burger-item.danger { color: var(--red); }
 .burger-divider { flex: 1; }
+
+/* ─── МАГАЗИН ────────────────────────────────────── */
+.shop-filters {
+  display: flex; gap: 8px; padding: 16px 16px 8px;
+  overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
+}
+.shop-filters::-webkit-scrollbar { display: none; }
+.shop-filter {
+  padding: 7px 16px; border-radius: 20px; font-size: 13px;
+  font-family: var(--font-hd); letter-spacing: 1px; white-space: nowrap;
+  background: var(--bg2); border: 1px solid rgba(255,255,255,.1);
+  color: var(--hint); cursor: pointer; transition: all .15s; flex-shrink: 0;
+}
+.shop-filter.active, .shop-filter:active {
+  background: var(--accent); color: var(--accent-text);
+  border-color: var(--accent);
+}
+.shop-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; padding: 8px 16px 32px; overflow-y: auto;
+}
+.shop-card {
+  background: var(--bg2); border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  overflow: hidden; cursor: pointer;
+  transition: border-color .15s, transform .15s;
+  display: flex; flex-direction: column;
+}
+.shop-card:active { transform: scale(.97); border-color: rgba(255,255,255,.2); }
+.shop-card.owned { border-color: rgba(255,255,255,.25); }
+.shop-card.equipped { border-color: var(--accent); }
+.shop-card-preview {
+  width: 100%; aspect-ratio: 1;
+  background: var(--bg); display: flex; align-items: center; justify-content: center;
+  font-size: 32px; color: var(--hint);
+}
+.shop-card-preview img { width: 100%; height: 100%; object-fit: cover; }
+.shop-card-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+.shop-card-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.shop-card-price {
+  font-family: var(--font-hd); font-size: 12px; color: var(--hint);
+  display: flex; align-items: center; gap: 4px;
+}
+.shop-card-price.owned { color: #4caf50; }
+.shop-card-price.equipped { color: var(--accent); }
+.shop-card-type {
+  font-size: 10px; letter-spacing: 1px; color: var(--hint);
+  text-transform: uppercase;
+}
+.shop-loading { grid-column: 1/-1; text-align: center; padding: 40px; color: var(--hint); }
+
+/* Страница товара */
+.shop-item-detail {
+  display: flex; flex-direction: column; gap: 20px;
+  padding: 16px; overflow-y: auto;
+}
+.shop-item-preview-lg {
+  width: 100%; aspect-ratio: 1; max-height: 260px;
+  background: var(--bg2); border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 64px; overflow: hidden;
+}
+.shop-item-preview-lg img { width: 100%; height: 100%; object-fit: contain; }
+.shop-item-meta { display: flex; flex-direction: column; gap: 10px; }
+.shop-item-type-badge {
+  display: inline-block; padding: 4px 10px; border-radius: 20px;
+  font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+  background: var(--bg2); border: 1px solid rgba(255,255,255,.1);
+  color: var(--hint); align-self: flex-start;
+}
+.shop-item-meta h3 { font-family: var(--font-hd); font-size: 22px; margin: 0; }
+.shop-item-desc { color: var(--hint); font-size: 14px; margin: 0; line-height: 1.5; }
+.shop-item-price-row { display: flex; align-items: center; gap: 12px; }
+.shop-item-price { font-family: var(--font-hd); font-size: 20px; color: var(--accent); }
+.shop-item-status { font-size: 13px; color: #4caf50; }
+
 
 /* ─── КОНЕЦ ИГРЫ ─────────────────────────────────── */
 #screen-gameover { align-items: center; justify-content: center; }
