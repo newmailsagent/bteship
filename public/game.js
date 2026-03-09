@@ -2993,8 +2993,8 @@ async function loadShopData() {
   try {
     const [itemsRes, invRes] = await Promise.all([
       fetch('/api/shop/items').then(r => r.json()),
-      currentPlayerId && !currentPlayerId.startsWith('guest_')
-        ? fetch(`/api/inventory/${currentPlayerId}`).then(r => r.json())
+      App.user?.id && !App.user.id.startsWith('guest_')
+        ? fetch(`/api/inventory/${App.user?.id}`).then(r => r.json())
         : Promise.resolve({ ok: true, data: { items: [], equipped: {} } }),
     ]);
     if (itemsRes.ok)  _shopItems = itemsRes.data || [];
@@ -3110,7 +3110,7 @@ function openShopItem(itemId) {
 async function handleShopItemBtn() {
   const itemId = _currentShopItemId;
   const item   = _shopItems.find(i => i.id === itemId);
-  if (!item || !currentPlayerId || currentPlayerId.startsWith('guest_')) return;
+  if (!item || !App.user?.id || App.user?.id?.startsWith('guest_')) return;
 
   const owned    = !!_shopInventory[itemId];
   const equipped = Object.values(_shopEquipped).includes(itemId);
@@ -3119,7 +3119,7 @@ async function handleShopItemBtn() {
     // Снять
     await fetch('/api/unequip', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: currentPlayerId, slot: item.type }),
+      body: JSON.stringify({ userId: App.user?.id, slot: item.type }),
     });
     delete _shopEquipped[item.type];
     openShopItem(itemId);
@@ -3131,7 +3131,7 @@ async function handleShopItemBtn() {
     // Надеть
     await fetch('/api/equip', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: currentPlayerId, itemId }),
+      body: JSON.stringify({ userId: App.user?.id, itemId }),
     });
     _shopEquipped[item.type] = itemId;
     openShopItem(itemId);
@@ -3143,7 +3143,7 @@ async function handleShopItemBtn() {
   try {
     const res = await fetch('/api/shop/buy', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: currentPlayerId, itemId }),
+      body: JSON.stringify({ userId: App.user?.id, itemId }),
     }).then(r => r.json());
 
     if (res.ok && res.invoiceUrl) {
@@ -3306,7 +3306,7 @@ function renderInventory() {
       e.stopPropagation();
       await fetch('/api/equip', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentPlayerId, itemId }),
+        body: JSON.stringify({ userId: App.user?.id, itemId }),
       });
       _shopEquipped[item.type] = itemId;
       renderInventory();
