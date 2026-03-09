@@ -3311,10 +3311,14 @@ function renderInventory() {
   }
 
   grid.innerHTML = filtered.map(item => {
-    const activeTheme = (() => { try { return localStorage.getItem('equippedTheme'); } catch(e) { return null; } })();
-    const equipped = item.id === 'theme_dark'
-      ? !activeTheme   // тёмная = активна когда нет другой темы в localStorage
-      : (activeTheme === item.id || (!activeTheme && Object.values(_shopEquipped).includes(item.id)));
+    // Для тем — источник правды localStorage (применяется мгновенно и не зависит от загрузки)
+    let equipped;
+    if (item.type === 'theme') {
+      const activeTheme = (() => { try { return localStorage.getItem('equippedTheme'); } catch(e) { return null; } })();
+      equipped = item.id === 'theme_dark' ? !activeTheme : activeTheme === item.id;
+    } else {
+      equipped = Object.values(_shopEquipped).includes(item.id);
+    }
     const cls = equipped ? 'shop-card equipped' : 'shop-card owned';
     return `<div class="${cls}" data-inv-item="${item.id}">
       <div class="shop-card-preview">${getItemPreviewHtml(item)}</div>
@@ -3346,7 +3350,9 @@ function renderInventory() {
     const item   = _shopItems.find(i => i.id === itemId);
     if (!item) return;
     const activeTheme = (() => { try { return localStorage.getItem('equippedTheme'); } catch(e) { return null; } })();
-    const equipped = item.id === 'theme_dark' ? !activeTheme : (activeTheme === itemId || Object.values(_shopEquipped).includes(itemId));
+    const equipped = item.type === 'theme'
+      ? (item.id === 'theme_dark' ? !activeTheme : activeTheme === itemId)
+      : Object.values(_shopEquipped).includes(itemId);
     if (equipped) return; // уже применено — не кликается
     btn.addEventListener('click', async e => {
       e.stopPropagation();
