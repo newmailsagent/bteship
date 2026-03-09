@@ -218,6 +218,34 @@ const allSunk = ships => ships.every(s => s.sunk);
 let currentScreen = 'loading';
 let _prevScreen   = null;
 
+// Возврат в меню с лоадером и синхронизацией данных
+async function goToMenu() {
+  const loader = document.getElementById('screen-loading');
+  const progEl = document.getElementById('loading-progress');
+
+  if (loader) {
+    loader.style.display = '';
+    if (progEl) progEl.textContent = '0%';
+  }
+  startLoadingCellAnim();
+
+  let pct = 0;
+  const t = setInterval(() => {
+    pct = Math.min(pct + Math.random() * 20 + 8, 85);
+    if (progEl) progEl.textContent = Math.round(pct) + '%';
+  }, 120);
+
+  await syncStatsFromServer().catch(() => {});
+  clearInterval(t);
+  if (progEl) progEl.textContent = '100%';
+  updateMenuUI();
+  await new Promise(r => setTimeout(r, 300));
+
+  stopLoadingCellAnim();
+  if (loader) loader.style.display = 'none';
+  showScreen('menu');
+}
+
 function showScreen(name, opts = {}) {
   const isBack = opts.isBack || false;
   const prev   = document.getElementById('screen-' + currentScreen);
@@ -226,9 +254,8 @@ function showScreen(name, opts = {}) {
 
   // Лоадер убираем насовсем через display:none
   const loader = document.getElementById('screen-loading');
-  if (loader && currentScreen === 'loading') {
-    loader.style.display = 'none';
-  }
+  stopLoadingCellAnim();
+  if (loader) loader.style.display = 'none';
 
   // Снимаем классы анимации (но не трогаем лоадер)
   document.querySelectorAll('.screen:not(#screen-loading)').forEach(s => {
@@ -1295,7 +1322,7 @@ function initVisibilityHandler() {
           Game.active = false;
           WS.disconnect();
           showModal('Сессия истекла', 'Вы долго не были в игре. Вернитесь в меню.', [
-            { label: 'В меню', cls: 'btn-primary', action: () => { closeModal(); showScreen('menu'); }},
+            { label: 'В меню', cls: 'btn-primary', action: () => { closeModal(); goToMenu(); }},
           ]);
         }
         return;
@@ -1307,7 +1334,7 @@ function initVisibilityHandler() {
         // Показываем соответствующий экран
         Game.active = false;
         showModal('Соединение потеряно', 'Игра прервана из-за потери связи.', [
-          { label: 'В меню', cls: 'btn-primary', action: () => { closeModal(); showScreen('menu'); }},
+          { label: 'В меню', cls: 'btn-primary', action: () => { closeModal(); goToMenu(); }},
         ]);
       }
     }
@@ -1587,7 +1614,7 @@ const Rematch = {
           statusEl.classList.remove('opponent-wants');
           statusEl.classList.add('declined');
         }
-        setTimeout(() => showScreen('menu'), 2500);
+        setTimeout(() => goToMenu(), 2500);
         return;
       }
       this._secs--;
@@ -1686,7 +1713,7 @@ const WS = {
 
     this.socket.on('disconnect', () => {
       if (Game.active) showModal('Соединение потеряно', 'Игра прервана.', [
-        { label: 'В меню', cls: 'btn-primary', action: () => { closeModal(); showScreen('menu'); }},
+        { label: 'В меню', cls: 'btn-primary', action: () => { closeModal(); goToMenu(); }},
       ]);
     });
 
@@ -1923,7 +1950,7 @@ const WS = {
         rematchBtn.textContent = 'Реванш';
         rematchBtn.classList.add('btn-disabled');
       }
-      setTimeout(() => showScreen('menu'), 3000);
+      setTimeout(() => goToMenu(), 3000);
     });
 
     // п.5: соперник закрыл вкладку/приложение — нам победа
@@ -2056,6 +2083,26 @@ const WS = {
 /* ─── АНИМАЦИЯ ПОИСКА ────────────────────────────────── */
 let _searchAnimTimer = null;
 let _searchClockTimer = null;
+
+// Анимация ячейки лоадера (те же 3 состояния что и при поиске соперника)
+let _loadingCellTimer = null;
+function startLoadingCellAnim() {
+  stopLoadingCellAnim();
+  const cell = document.getElementById('loading-cell');
+  if (!cell) return;
+  const states = ['', 'state-miss', 'state-hit'];
+  let idx = 0;
+  const tick = () => {
+    cell.className = 'search-cell ' + states[idx];
+    idx = (idx + 1) % states.length;
+    _loadingCellTimer = setTimeout(tick, 850);
+  };
+  tick();
+}
+function stopLoadingCellAnim() {
+  clearTimeout(_loadingCellTimer);
+  _loadingCellTimer = null;
+}
 
 function startSearchUI() {
   stopSearchUI();
@@ -2818,7 +2865,39 @@ function renderOpponentAvatar(name, isBot) {
 }
 
 /* ─── СТАРТ ──────────────────────────────────────── */
+// Обновить прогресс-счётчик на лоадере
+function setLoadingProgress(pct) {
+  const el = document.getElementById('loading-progress');
+  if (el) el.textContent = Math.round(pct) + '%';
+}
+
+// Показать лоадер поверх любого экрана (для возврата в меню после боя)
+function showLoaderOverMenu(onDone) {
+  const loader = document.getElementById('screen-loading');
+  if (!loader) { onDone(); return; }
+  // Сбрасываем прогресс и показываем
+  setLoadingProgress(0);
+  loader.style.display = '';
+  loader.classList.add('active');
+
+  let pct = 0;
+  const tick = setInterval(() => {
+    pct = Math.min(pct + Math.random() * 18 + 5, 90);
+    setLoadingProgress(pct);
+  }, 120);
+
+  onDone(function hideLoader() {
+    clearInterval(tick);
+    setLoadingProgress(100);
+    setTimeout(() => {
+      loader.classList.remove('active');
+      loader.style.display = 'none';
+    }, 250);
+  });
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
+  // Инициализируем всё что не требует сети
   initTelegram();
   initUser();
   initSettings();
@@ -2829,16 +2908,34 @@ window.addEventListener('DOMContentLoaded', async () => {
   initBurger();
   initVisibilityHandler();
   bindNav();
-  updateMenuUI();
   initPromoBanner();
   updateBurgerSound();
   updateBurgerEnemyMoves();
   initSwipeBack();
   initOnlineCounter();
-  showScreen('menu');
 
-  // Синхронизируем статистику сразу при запуске
-  syncStatsFromServer().catch(() => {});
+  // Анимируем прогресс лоадера пока грузим данные с сервера
+  startLoadingCellAnim();
+  setLoadingProgress(5);
+  let pct = 5;
+  const progressTick = setInterval(() => {
+    pct = Math.min(pct + Math.random() * 12 + 3, 85);
+    setLoadingProgress(pct);
+  }, 150);
+
+  // Грузим данные с сервера ДО показа меню
+  await syncStatsFromServer().catch(() => {});
+
+  clearInterval(progressTick);
+  setLoadingProgress(100);
+
+  // Обновляем UI уже с актуальными данными
+  updateMenuUI();
+
+  // Короткая пауза чтобы игрок увидел 100%
+  await new Promise(r => setTimeout(r, 300));
+
+  showScreen('menu');
 
   // Обработка ссылки-приглашения: /?room=<roomId> или TG startapp=room_<roomId>
   const params = new URLSearchParams(window.location.search);

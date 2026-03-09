@@ -110,12 +110,26 @@ html, body {
   opacity: 0;
 }
 #screen-loading {
-  transform: none !important;
-  opacity: 1 !important;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  background: var(--bg);
+  z-index: 9999;
+  padding: 0;
 }
-.loading-inner { text-align: center; }
+#screen-loading.hidden {
+  display: none;
+}
+.loading-inner {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: auto;
+}
 .loading-grid {
   display: grid; grid-template-columns: repeat(3, 18px); gap: 6px;
   margin: 0 auto 20px;
@@ -136,6 +150,9 @@ html, body {
 .loading-grid span:nth-child(9){animation-delay:.6s}
 @keyframes cell-blink { 0%,100%{opacity:.15;transform:scale(.9)} 50%{opacity:1;transform:scale(1)} }
 .loading-text { font-family: var(--font-hd); font-size: 22px; letter-spacing: 6px; color: var(--accent); animation: text-pulse 1.5s ease-in-out infinite; }
+.loading-progress { font-family: var(--font-hd); font-size: 13px; letter-spacing: 3px; color: var(--hint); margin-top: 8px; }
+.loading-grid-wait { margin-bottom: 0; }
+.waiting-anim { margin: 0 auto 20px; }
 @keyframes text-pulse { 0%,100%{opacity:.6} 50%{opacity:1} }
 
 /* ─── МЕНЮ ───────────────────────────────────────── */
@@ -242,9 +259,17 @@ html, body {
 .mode-card { display: flex; align-items: center; gap: 14px; background: var(--bg2); border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); padding: 14px 16px; cursor: pointer; transition: border-color .2s; text-align: left; color: var(--text); }
 .mode-card:active { transform: scale(.98); }
 .mode-card:hover  { border-color: var(--accent); }
+.mode-card-large { padding: 18px 20px; }
+.mode-card-bot { flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 18px 12px; }
+.mode-bots-row { display: flex; gap: 10px; }
 .mode-info { flex: 1; }
+.mode-info-center { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
 .mode-info strong { display: block; font-size: 15px; }
 .mode-info span   { color: var(--hint); font-size: 13px; }
+.mode-tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+.mode-tag { display: flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 30px; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+.tag-green { background: rgba(38,166,91,.15); color: #26a65b; }
+.tag-arrow { display: inline-block; transform: rotate(90deg); font-size: 12px; line-height: 1; }
 .mode-badge { padding: 3px 9px; border-radius: 30px; font-size: 11px; font-weight: 700; letter-spacing: 1px; background: var(--bg); color: var(--hint); }
 .mode-badge.online { background: rgba(38,166,91,.2); color: var(--green); }
 .mode-badge.medium { background: rgba(244,166,29,.2); color: var(--yellow); }

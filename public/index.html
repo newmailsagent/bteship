@@ -31,18 +31,19 @@
   </script>
 </head>
 <body>
-
-<!-- ЗАГРУЗКА -->
-<div id="screen-loading" class="screen active">
+<div id="screen-loading">
   <div class="loading-inner">
-    <div class="loading-grid">
-      <span></span><span></span><span></span>
-      <span></span><span></span><span></span>
-      <span></span><span></span><span></span>
+    <div class="search-anim">
+      <div class="search-cell" id="loading-cell"></div>
     </div>
     <p class="loading-text">МОРСКОЙ БОЙ</p>
+    <p class="loading-progress" id="loading-progress">0%</p>
   </div>
 </div>
+
+
+<!-- ЗАГРУЗКА -->
+
 
 <!-- ГЛАВНОЕ МЕНЮ -->
 <div id="screen-menu" class="screen">
@@ -154,21 +155,40 @@
     <h2>Режим игры</h2>
   </div>
   <div class="mode-list">
-    <button class="mode-card" id="mode-random">
-      <div class="mode-info"><strong>Случайный соперник</strong><span>Найти игрока онлайн</span></div>
-      <div class="mode-badge online">ОНЛАЙН</div>
+    <button class="mode-card mode-card-large" id="mode-random">
+      <div class="mode-info mode-info-center">
+        <strong>Случайный соперник</strong>
+        <span>Найти игрока онлайн</span>
+        <div class="mode-tags">
+          <span class="mode-badge online">ОНЛАЙН</span>
+          <span class="mode-badge online"><span class="tag-arrow">&#171;</span> РЕЙТИНГ</span>
+          <span class="mode-badge online"><span class="tag-arrow">&#171;</span> ОПЫТ</span>
+        </div>
+      </div>
     </button>
-    <button class="mode-card" id="mode-friend">
-      <div class="mode-info"><strong>С другом</strong><span>Пригласить по ссылке</span></div>
+    <button class="mode-card mode-card-large" id="mode-friend">
+      <div class="mode-info mode-info-center">
+        <strong>С другом</strong>
+        <span>Пригласить по ссылке</span>
+        <div class="mode-tags">
+          <span class="mode-badge online"><span class="tag-arrow">&#171;</span> ОПЫТ</span>
+        </div>
+      </div>
     </button>
-    <button class="mode-card" id="mode-bot-easy">
-      <div class="mode-info"><strong>Против бота</strong><span>Обычная сложность</span></div>
-      <div class="mode-badge">ЛЕГКО</div>
-    </button>
-    <button class="mode-card" id="mode-bot-hard">
-      <div class="mode-info"><strong>Против бота</strong><span>Тяжёлая сложность — тактический ИИ</span></div>
-      <div class="mode-badge hard">СЛОЖНО</div>
-    </button>
+    <div class="mode-bots-row">
+      <button class="mode-card mode-card-bot" id="mode-bot-easy">
+        <div class="mode-info mode-info-center">
+          <strong>Против бота</strong>
+          <div class="mode-badge" style="margin-top:6px">ЛЕГКО</div>
+        </div>
+      </button>
+      <button class="mode-card mode-card-bot" id="mode-bot-hard">
+        <div class="mode-info mode-info-center">
+          <strong>Против бота</strong>
+          <div class="mode-badge hard" style="margin-top:6px">СЛОЖНО</div>
+        </div>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -207,8 +227,12 @@
 <!-- ОЖИДАНИЕ СОПЕРНИКА -->
 <div id="screen-waiting" class="screen">
   <div class="waiting-inner">
-    <div class="search-anim" id="search-anim">
-      <div class="search-cell" id="search-cell"></div>
+    <div class="waiting-anim" id="search-anim">
+      <div class="loading-grid loading-grid-wait">
+        <span></span><span></span><span></span>
+        <span></span><span></span><span></span>
+        <span></span><span></span><span></span>
+      </div>
     </div>
     <h2 id="waiting-title">Ищем соперника…</h2>
     <p id="waiting-sub">Это займёт несколько секунд</p>
@@ -468,7 +492,7 @@
   <div class="settings-list">
     <div class="setting-item"><span>Звуки</span><label class="toggle-switch"><input type="checkbox" id="setting-sound" checked/><span class="toggle-track"></span></label></div>
     <div class="setting-item mobile-only"><span>Вибрация</span><label class="toggle-switch"><input type="checkbox" id="setting-vibro" checked/><span class="toggle-track"></span></label></div>
-    <div class="setting-item" id="hints-setting-item"><span>Подсказки (баббл)</span><label class="toggle-switch"><input type="checkbox" id="setting-hints" checked/><span class="toggle-track"></span></label></div>
+    <div class="setting-item" id="hints-setting-item"><span>Подсказки</span><label class="toggle-switch"><input type="checkbox" id="setting-hints" checked/><span class="toggle-track"></span></label></div>
   </div>
 </div>
 
