@@ -373,8 +373,7 @@ function calcXpReward(result, sunkenCount, shots, hits) {
     if (acc >= 0.50) accBonus = 500;
     else if (acc >= 0.45) accBonus = 300;
     else if (acc >= 0.40) accBonus = 150;
-    const shipBonus = 50 * (sunkenCount || 0);
-    const baseXp  = 1000 + shipBonus;
+    const baseXp  = 1000;
     const bonusXp = accBonus;
     return { total: baseXp + bonusXp, baseXp, bonusXp };
   } else {
