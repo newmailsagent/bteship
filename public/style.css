@@ -1358,3 +1358,141 @@ body.theme-light .hero-title-svg svg path[fill="white"] { fill: #1a1a1a !importa
 body.theme-light .hero-title-svg svg path[fill="#A4A4A4"] { fill: #666666 !important; }
 /* Красные элементы (#ED2822) — оставляем как есть */
 /* Красные диагональные линии в маске — оставляем */
+
+/* ═══════════════════════════════════════════════════
+   СТАТИЧЕСКИЕ СТРАНИЦЫ (Правила / Соглашение)
+════════════════════════════════════════════════════ */
+
+.static-page-content {
+  flex: 1; overflow-y: auto;
+  padding: 16px 20px 40px;
+  display: flex; flex-direction: column; gap: 0;
+}
+
+.static-section {
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.static-section:last-child { border-bottom: none; }
+
+.static-h3 {
+  font-family: var(--font-hd);
+  font-size: 12px; letter-spacing: 1.5px;
+  color: var(--hint); text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.static-section p {
+  font-size: 14px; line-height: 1.65;
+  color: var(--text); margin-bottom: 8px;
+}
+.static-section p:last-child { margin-bottom: 0; }
+
+.static-section strong { color: var(--text); font-weight: 600; }
+
+.static-list {
+  list-style: none; margin: 8px 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.static-list li {
+  font-size: 14px; line-height: 1.6; color: var(--text);
+  padding-left: 16px; position: relative;
+}
+.static-list li::before {
+  content: '—'; position: absolute; left: 0;
+  color: var(--hint);
+}
+
+.static-date {
+  font-size: 12px !important; color: var(--hint) !important;
+  margin-bottom: 10px !important;
+}
+
+/* Светлая тема */
+body.theme-light .static-section { border-bottom-color: rgba(0,0,0,.08); }
+
+/* ═══════════════════════════════════════════════════
+   БУРГЕР — мелкие ссылки внизу
+════════════════════════════════════════════════════ */
+
+.burger-item-small {
+  padding: 11px 20px !important;
+  font-size: 13px !important;
+  color: var(--hint) !important;
+  border-bottom-color: rgba(255,255,255,.03) !important;
+}
+.burger-item-small svg { opacity: 0.55; }
+.burger-item-small:active { background: rgba(255,255,255,.04) !important; }
+
+.burger-divider-thin {
+  height: 1px;
+  background: rgba(255,255,255,.06);
+  flex-shrink: 0;
+}
+
+body.theme-light .burger-item-small { color: var(--hint) !important; border-bottom-color: rgba(0,0,0,.04) !important; }
+body.theme-light .burger-divider-thin { background: rgba(0,0,0,.07); }
+
+/* ═══════════════════════════════════════════════════
+   БАННЕР СОГЛАСИЯ (первый запуск)
+════════════════════════════════════════════════════ */
+
+.consent-banner {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  z-index: 500;
+  background: var(--bg2);
+  border-top: 1px solid rgba(255,255,255,.10);
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 32px rgba(0,0,0,.45);
+  animation: consent-slide-up .35s cubic-bezier(.4,0,.2,1) both;
+}
+.consent-banner.hidden { display: none; }
+
+@keyframes consent-slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Десктоп — ограничиваем ширину как у экранов */
+@media (min-width: 1281px) {
+  .consent-banner {
+    left: 50%; right: auto;
+    transform: translateX(-50%);
+    width: 990px;
+  }
+  @keyframes consent-slide-up {
+    from { transform: translateX(-50%) translateY(100%); opacity: 0; }
+    to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+  }
+}
+
+.consent-inner {
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.consent-text {
+  font-size: 13px; line-height: 1.55;
+  color: var(--hint); margin: 0;
+}
+
+.consent-link {
+  background: none; border: none; padding: 0;
+  color: var(--accent); font-size: 13px;
+  text-decoration: underline; text-decoration-style: dotted;
+  cursor: pointer; font-family: var(--font-ui);
+  display: inline;
+}
+.consent-link:active { opacity: .7; }
+
+.consent-accept-btn {
+  align-self: stretch;
+  padding: 14px !important;
+  font-size: 15px !important;
+}
+
+body.theme-light .consent-banner {
+  background: #e8e8e8;
+  border-top-color: rgba(0,0,0,.10);
+  box-shadow: 0 -8px 32px rgba(0,0,0,.15);
+}
+body.theme-light .consent-link { color: var(--accent); }

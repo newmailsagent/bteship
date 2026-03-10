@@ -3,8 +3,44 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Морской бой</title>
+
+  <!-- SEO -->
+  <title>Морской бой онлайн — играй в браузере и Telegram | bteship</title>
+  <meta name="description" content="Классический Морской бой прямо в браузере и Telegram. Играй против бота или с живыми соперниками онлайн, отслеживай статистику, соревнуйся в рейтинге и открывай уникальные предметы в магазине." />
+  <meta name="keywords" content="морской бой, морской бой онлайн, battleship, игра морской бой, telegram игра, морской бой в telegram" />
+  <meta name="author" content="bteship" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://morskoy-boy.ru/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://morskoy-boy.ru/" />
+  <meta property="og:title"       content="Морской бой онлайн — играй в Telegram и браузере" />
+  <meta property="og:description" content="Классический Морской бой с онлайн-режимом, рейтингом и магазином. Бесплатно, без регистрации." />
+  <meta property="og:image"       content="https://morskoy-boy.ru/og-preview.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="Морской бой онлайн" />
+  <meta name="twitter:description" content="Играй в Морской бой против живых соперников прямо в Telegram или браузере." />
+
+  <!-- Favicon SVG -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111111'/%3E%3Crect x='8' y='8' width='22' height='22' rx='3' fill='%231c1c1c' stroke='%23333' stroke-width='1'/%3E%3Crect x='34' y='8' width='22' height='22' rx='3' fill='%23ED2822' opacity='.9'/%3E%3Crect x='8' y='34' width='22' height='22' rx='3' fill='%231c1c1c' stroke='%23333' stroke-width='1'/%3E%3Crect x='34' y='34' width='22' height='22' rx='3' fill='%231c1c1c' stroke='%23333' stroke-width='1'/%3E%3C/svg%3E" />
+
   <link rel="stylesheet" href="style.css" />
+  <!-- Yandex.Metrika counter -->
+  <script type="text/javascript">
+    (function(m,e,t,r,i,k,a){
+      m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+      m[i].l=1*new Date();
+      for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+      k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+    })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=107062883', 'ym');
+    ym(107062883, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+  </script>
+  <noscript><div><img src="https://mc.yandex.ru/watch/107062883" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+  <!-- /Yandex.Metrika counter -->
+
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
     // Сразу после загрузки TG скрипта — сбрасываем все его CSS переменные
@@ -31,6 +67,14 @@
   </script>
 </head>
 <body>
+<!-- SEO: скрытые подзаголовки для индексации -->
+<div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0" aria-hidden="true">
+  <h1>Морской бой онлайн — классическая игра в браузере и Telegram</h1>
+  <h2>Играй против бота или живого соперника в онлайн-режиме</h2>
+  <h2>Рейтинг игроков и статистика побед</h2>
+  <h2>Магазин предметов — темы, рамки, реакции и звания</h2>
+  <h2>Бесплатная игра без регистрации — доступна в Telegram Mini App</h2>
+</div>
 <div id="screen-loading">
   <div class="loading-inner">
     <div class="search-anim">
@@ -555,6 +599,25 @@
     <span>Настройки</span>
   </button>
   <div class="burger-divider"></div>
+  <button class="burger-item burger-item-small" id="burger-rules-btn">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+      <polyline points="10 9 9 9 8 9"/>
+    </svg>
+    <span>Правила игры</span>
+  </button>
+  <button class="burger-item burger-item-small" id="burger-terms-btn">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <span>Соглашение</span>
+  </button>
+  <div class="burger-divider-thin"></div>
   <button class="burger-item danger" id="burger-surrender">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
@@ -603,5 +666,241 @@
     </div>
   </div>
 </div>
+
+<!-- ПРАВИЛА ИГРЫ -->
+<div id="screen-rules" class="screen">
+  <div class="page-header">
+    <button class="btn-back" id="rules-back-btn" data-screen="menu">← Назад</button>
+    <h2>Правила игры</h2>
+  </div>
+  <div class="static-page-content">
+
+    <div class="static-section">
+      <h3 class="static-h3">Общие сведения</h3>
+      <p>Морской бой — классическая стратегическая игра для двух игроков. Цель — первым потопить все корабли соперника, стреляя по его скрытому полю. Игра доступна в браузере и как Telegram Mini App.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Игровое поле</h3>
+      <p>Каждый игрок получает квадратное поле 10×10 клеток. Столбцы обозначены буквами A–J, строки — цифрами 1–10.</p>
+      <p>На поле размещается флот из 10 кораблей:</p>
+      <ul class="static-list">
+        <li>1 корабль × 4 клетки (четырёхпалубный)</li>
+        <li>2 корабля × 3 клетки (трёхпалубные)</li>
+        <li>3 корабля × 2 клетки (двухпалубные)</li>
+        <li>4 корабля × 1 клетка (однопалубные)</li>
+      </ul>
+      <p>Корабли не могут соприкасаться друг с другом даже по диагонали — между любыми двумя кораблями должна быть минимум одна пустая клетка.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Расстановка кораблей</h3>
+      <p>Перед боем каждый игрок расставляет флот на своём поле. Противник не видит расположения кораблей.</p>
+      <ul class="static-list">
+        <li>Кнопка «↻ Случайно» автоматически размещает все корабли в случайных позициях.</li>
+        <li>Кликни по кораблю в доке — он автоматически встанет на первое свободное место.</li>
+        <li>Зажми корабль на поле и перетащи его в новую позицию.</li>
+        <li>Двойной тап по кораблю меняет его ориентацию (горизонтальная / вертикальная).</li>
+        <li>Долгое нажатие (600 мс) убирает корабль с поля обратно в dok.</li>
+        <li>Кнопка «Очистить» снимает все корабли с поля.</li>
+      </ul>
+      <p>Расстановка запоминается автоматически. Кнопка «✓ Готов к бою» становится активной только после того, как все 10 кораблей расставлены.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Режимы игры</h3>
+      <p><strong>Случайный соперник</strong> — поиск живого игрока через матчмейкинг. Засчитывает опыт и рейтинг.</p>
+      <p><strong>С другом</strong> — создаётся приватная комната. Создатель получает ссылку-приглашение. Засчитывает опыт и хранит счёт личных дуэлей.</p>
+      <p><strong>Против бота — Легко</strong> — бот стреляет случайно, но добивает раненые корабли.</p>
+      <p><strong>Против бота — Сложно</strong> — бот применяет профессиональную тактику: охота по шахматному паттерну и направленное добивание.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Игровой процесс</h3>
+      <p>Игроки ходят по очереди. Первый ход определяется случайно.</p>
+      <p><strong>Попадание</strong> — клетка отмечается красным, игрок делает ещё один выстрел.</p>
+      <p><strong>Промах</strong> — клетка отмечается серым, ход переходит к сопернику.</p>
+      <p><strong>Потопление</strong> — все клетки корабля поражены. Периметр вокруг корабля автоматически закрывается промахами.</p>
+      <p><strong>Победа</strong> — побеждает тот, кто первым потопил все 10 кораблей соперника.</p>
+      <p>На мобильном отображается одно поле, переключаемое кнопками «Врага» / «Моё». На десктопе оба поля видны одновременно.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Таймер хода (онлайн)</h3>
+      <p>В онлайн-режиме каждый ход ограничен по времени. За 20 секунд до окончания появляется обратный отсчёт. Последние 10 секунд таймер мигает красным.</p>
+      <p>Если игрок не успел сделать ход — ход пропускается. При двух пропущенных ходах подряд засчитывается поражение.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Сдача и реванш</h3>
+      <p>Сдаться можно через бургер-меню или кнопку «Сдаться» внизу экрана. Перед сдачей отображается диалог подтверждения.</p>
+      <p>После боя доступна кнопка «Реванш». Если оба игрока нажимают её в течение 10 секунд — начинается новый бой без повторного матчмейкинга.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Опыт, уровни и рейтинг (Telegram)</h3>
+      <p>За онлайн-бои начисляется опыт (XP). Всего 30 уровней. Звания: Новобранец Неона → Хакер Дронов → Неоновый Рейдер → Квазарный Титан → Абсолютный Доминайтор.</p>
+      <p>Рейтинг — добровольный. Учитываются только победы в режиме «Случайный соперник». При выходе из рейтинга счёт обнуляется.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ -->
+<div id="screen-terms" class="screen">
+  <div class="page-header">
+    <button class="btn-back" id="terms-back-btn" data-screen="menu">← Назад</button>
+    <h2>Соглашение</h2>
+  </div>
+  <div class="static-page-content">
+
+    <div class="static-section">
+      <p class="static-date">Последняя редакция: 10 марта 2026 г.</p>
+      <p>Настоящее Пользовательское соглашение регулирует использование Telegram Mini App «Морской бой». Используя игру, вы подтверждаете своё полное согласие со всеми условиями. Если вы не согласны — немедленно прекратите использование игры.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Предмет соглашения</h3>
+      <p>Игра предоставляет пользователям возможность играть в стратегическую игру через Telegram Mini App. Пользователи получают простую неисключительную лицензию на использование исключительно в личных некоммерческих целях.</p>
+      <p>Разработчик вправе изменять функционал, правила и условия соглашения без предварительного уведомления.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Права и обязанности</h3>
+      <p><strong>Пользователь обязуется:</strong></p>
+      <ul class="static-list">
+        <li>Использовать игру в соответствии с её назначением и правилами.</li>
+        <li>Не применять читы, боты, модифицированные клиенты или иные способы обмана.</li>
+        <li>Не распространять вредоносный контент и не нарушать права других пользователей.</li>
+        <li>Соблюдать правила платформы Telegram.</li>
+      </ul>
+      <p><strong>Разработчик вправе:</strong></p>
+      <ul class="static-list">
+        <li>Блокировать доступ к игре за нарушения без объяснения причин.</li>
+        <li>Изменять или прекращать работу игры в одностороннем порядке.</li>
+      </ul>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Конфиденциальность</h3>
+      <p>Игра не собирает и не хранит персональные данные. Все данные (Telegram ID, имя, статистика) обрабатываются через официальное API Telegram.</p>
+      <p>При запуске Telegram автоматически передаёт стандартный набор данных (ID, имя), что является обязательной функцией платформы. Данные используются только для работы игры (матчмейкинг, статистика, прогресс) и не передаются третьим лицам.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Ограничение ответственности</h3>
+      <p>Игра предоставляется на условиях «как есть». Разработчик не несёт ответственности за:</p>
+      <ul class="static-list">
+        <li>Сбои в работе игры, включая технические неполадки.</li>
+        <li>Потерю игрового прогресса, статистики или виртуальных предметов.</li>
+        <li>Любые убытки, прямые или косвенные, возникшие при использовании игры.</li>
+      </ul>
+      <p>Пользователь использует игру на свой страх и риск, самостоятельно соблюдая действующее законодательство РФ и правила Telegram.</p>
+    </div>
+
+    <div class="static-section">
+      <h3 class="static-h3">Заключительные положения</h3>
+      <p>Соглашение вступает в силу с момента первого запуска игры и действует бессрочно. Разработчик вправе вносить изменения — актуальная версия всегда доступна в интерфейсе игры.</p>
+      <p>Все споры разрешаются в судах Российской Федерации в соответствии с законодательством РФ.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- БАННЕР СОГЛАСИЯ (первый запуск) -->
+<div id="consent-banner" class="consent-banner hidden">
+  <div class="consent-inner">
+    <p class="consent-text">
+      Продолжая использовать игру, вы соглашаетесь с
+      <button class="consent-link" id="consent-open-terms">Пользовательским соглашением</button>.
+      Ознакомьтесь также с
+      <button class="consent-link" id="consent-open-rules">Правилами игры</button>.
+    </p>
+    <button class="btn btn-primary consent-accept-btn" id="consent-accept">Принять и продолжить</button>
+  </div>
+</div>
+
+<script>
+/* ─── ПРАВИЛА И СОГЛАШЕНИЕ ─────────────────────────────────── */
+(function() {
+  // Патчим _prevBackTarget чтобы свайп назад работал и с новых экранов
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof _prevBackTarget === 'function') {
+      const _orig = _prevBackTarget;
+      // Переопределяем через closure (game.js объявляет как function, не const)
+      window._prevBackTarget = function() {
+        if (typeof currentScreen !== 'undefined') {
+          if (currentScreen === 'rules') return document.getElementById('rules-back-btn')?.dataset.screen || 'menu';
+          if (currentScreen === 'terms') return document.getElementById('terms-back-btn')?.dataset.screen || 'menu';
+        }
+        return _orig();
+      };
+    }
+  });
+  // Открыть экран из бургера или баннера
+  function openStatic(screenName, fromBanner) {
+    // Запомним откуда пришли — вернёмся туда по кнопке Назад
+    const back = fromBanner ? 'menu' : (window._currentScreenForBack || 'menu');
+    const backBtn = document.getElementById(screenName === 'rules' ? 'rules-back-btn' : 'terms-back-btn');
+    if (backBtn) backBtn.dataset.screen = back;
+
+    // Закрываем бургер если он открыт
+    document.getElementById('burger-menu')?.classList.remove('open');
+    document.getElementById('burger-overlay')?.classList.add('hidden');
+
+    if (typeof showScreen === 'function') {
+      showScreen(screenName);
+    }
+  }
+
+  // Кнопки в бургере
+  document.getElementById('burger-rules-btn')?.addEventListener('click', () => {
+    window._currentScreenForBack = typeof currentScreen !== 'undefined' ? currentScreen : 'menu';
+    openStatic('rules', false);
+  });
+  document.getElementById('burger-terms-btn')?.addEventListener('click', () => {
+    window._currentScreenForBack = typeof currentScreen !== 'undefined' ? currentScreen : 'menu';
+    openStatic('terms', false);
+  });
+
+  // Кнопки в баннере
+  document.getElementById('consent-open-rules')?.addEventListener('click', () => {
+    openStatic('rules', true);
+  });
+  document.getElementById('consent-open-terms')?.addEventListener('click', () => {
+    openStatic('terms', true);
+  });
+
+  // Принять соглашение
+  document.getElementById('consent-accept')?.addEventListener('click', () => {
+    try { localStorage.setItem('bs_consent_accepted', '1'); } catch(e) {}
+    const banner = document.getElementById('consent-banner');
+    if (banner) {
+      banner.style.transition = 'transform .3s ease, opacity .3s';
+      banner.style.transform  = 'translateY(100%)';
+      banner.style.opacity    = '0';
+      setTimeout(() => banner.classList.add('hidden'), 320);
+    }
+  });
+
+  // Показываем баннер при первом запуске (после того как game.js инициализируется)
+  function maybeShowBanner() {
+    try {
+      const accepted = localStorage.getItem('bs_consent_accepted');
+      if (accepted) return;
+    } catch(e) {}
+    const banner = document.getElementById('consent-banner');
+    if (banner) banner.classList.remove('hidden');
+  }
+
+  // Ждём DOMContentLoaded + небольшую задержку чтобы меню уже показалось
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(maybeShowBanner, 1200));
+  } else {
+    setTimeout(maybeShowBanner, 1200);
+  }
+})();
+</script>
+
 </body>
 </html>
