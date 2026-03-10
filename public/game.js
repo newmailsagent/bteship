@@ -3070,12 +3070,21 @@ let _currentShopItemId = null;
 // Загрузить каталог и инвентарь
 async function loadShopData() {
   try {
+    const uid = App.user?.id;
+    const isGuest = !uid || uid.startsWith('guest_');
+    console.log(`[Shop] loadShopData uid=${uid} isGuest=${isGuest} initData=${!!window.Telegram?.WebApp?.initData}`);
+
     const [itemsRes, invRes] = await Promise.all([
       fetch('/api/shop/items').then(r => r.json()),
-      App.user?.id && !App.user.id.startsWith('guest_')
-        ? authFetch(`/api/inventory/${App.user?.id}`).then(r => r.json())
+      !isGuest
+        ? authFetch(`/api/inventory/${uid}`).then(async r => {
+            const json = await r.json();
+            console.log(`[Shop] inventory status=${r.status} ok=${json.ok} items=${json.data?.items?.length}`);
+            return json;
+          })
         : Promise.resolve({ ok: true, data: { items: [], equipped: {} } }),
     ]);
+    console.log(`[Shop] items=${itemsRes.data?.length} invOk=${invRes.ok}`);
     if (itemsRes.ok)  _shopItems = itemsRes.data || [];
     if (invRes.ok) {
       _shopInventory = {};

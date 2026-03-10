@@ -42,11 +42,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:  ["'self'"],
-      scriptSrc:   ["'self'", "'unsafe-inline'", "https://telegram.org", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
+      scriptSrc:   ["'self'", "'unsafe-inline'", "https://telegram.org", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com", "https://mc.yandex.ru", "https://yastatic.net"],
       styleSrc:    ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
       fontSrc:     ["'self'", "https://fonts.gstatic.com"],
-      imgSrc:      ["'self'", "data:", "https:"],
-      connectSrc:  ["'self'", "wss:", "ws:", "https://telegram.org"],
+      imgSrc:      ["'self'", "data:", "https:", "https://mc.yandex.ru"],
+      connectSrc:  ["'self'", "wss:", "ws:", "https://telegram.org", "https://mc.yandex.ru", "https://yandex.ru"],
       frameSrc:    ["'none'"],
       objectSrc:   ["'none'"],
     },
