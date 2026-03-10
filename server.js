@@ -1315,9 +1315,6 @@ function verifyTelegramInitData(initData) {
     const secretKey = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
     const checkHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
     if (checkHash !== hash) return null;
-    // Проверяем свежесть (не старше 24 часов)
-    const authDate = parseInt(params.get('auth_date') || '0', 10);
-    if (Date.now() / 1000 - authDate > 86400) return null;
     // Извлекаем user.id
     const userStr = params.get('user');
     if (!userStr) return null;
@@ -1340,12 +1337,13 @@ app.get('/api/inventory/:userId', (req, res) => {
     const { userId } = req.params;
     if (!userId || userId.startsWith('guest_')) return res.json({ ok: true, data: { items: [], equipped: {} } });
 
-    // Верифицируем что запрашивает именно владелец (или браузерный гость без initData)
-    const initData     = req.headers['x-telegram-init-data'];
-    const verifiedId   = initData ? verifyTelegramInitData(initData) : null;
+    // Верифицируем подпись только если initData передан и валиден
+    // Невалидный/просроченный initData не блокируем — клиент мог открыть давно
+    const initData   = req.headers['x-telegram-init-data'];
+    const verifiedId = initData ? verifyTelegramInitData(initData) : null;
 
-    // Если initData передан, но не совпадает с запрашиваемым userId — отказ
-    if (initData && verifiedId !== normalizeId(userId)) {
+    // Если подпись валидна но userId не совпадает — явная попытка получить чужой инвентарь
+    if (verifiedId && verifiedId !== normalizeId(userId)) {
       return res.status(403).json({ ok: false, error: 'forbidden' });
     }
 
