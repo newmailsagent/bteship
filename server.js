@@ -887,7 +887,12 @@ function checkSunkServer(field, hitR, hitC) {
         if (nr >= 0 && nr < 10 && nc >= 0 && nc < 10) stack.push([nr, nc]);
     }
   }
-  return ship.length > 0 && ship.every(([r, c]) => field[r][c] === 2);
+  const isSunk = ship.length > 0 && ship.every(([r, c]) => field[r][c] === 2);
+  // Помечаем потопленный корабль как 4 — нужно для countSunkenShips
+  if (isSunk) {
+    for (const [r, c] of ship) field[r][c] = 4;
+  }
+  return isSunk;
 }
 
 // Считаем количество потопленных кораблей в поле (клетки со значением 4, flood-fill группами)
