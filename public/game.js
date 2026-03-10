@@ -252,6 +252,14 @@ function showScreen(name, opts = {}) {
   const next   = document.getElementById('screen-' + name);
   if (!next || currentScreen === name) return;
 
+  // Если уходим с расстановки или ожидания в онлайн-режиме — уведомляем сервер
+  if (['placement', 'waiting'].includes(currentScreen) &&
+      !['placement', 'waiting', 'game'].includes(name) &&
+      pendingGameMode === 'online' && WS.socket && WS.roomId && !Game.active) {
+    WS.socket.emit('leave_room', { roomId: WS.roomId });
+    WS.disconnect();
+  }
+
   // Лоадер убираем насовсем через display:none
   const loader = document.getElementById('screen-loading');
   stopLoadingCellAnim();
@@ -1897,9 +1905,17 @@ const WS = {
 
     // ── Соперник вышел ────────────────────────────────
     this.socket.on('opponent_left', () => {
-      if (Game.active) showModal('Соперник вышел', 'Тебе засчитана победа!', [
-        { label: 'Ок', cls: 'btn-primary', action: () => { closeModal(); endGame('win'); }},
-      ]);
+      if (Game.active) {
+        showModal('Соперник вышел', 'Тебе засчитана победа!', [
+          { label: 'Ок', cls: 'btn-primary', action: () => { closeModal(); endGame('win'); }},
+        ]);
+      } else if (['placement', 'waiting'].includes(currentScreen)) {
+        // Соперник вышел во время расстановки — уведомляем и возвращаем в меню
+        WS.disconnect();
+        showModal('Соперник вышел', 'Соперник покинул расстановку. Возвращаемся в меню.', [
+          { label: 'Ок', cls: 'btn-primary', action: () => { closeModal(); goToMenu(); }},
+        ]);
+      }
     });
 
     this.socket.on('room_expired', () => {
@@ -2774,8 +2790,15 @@ function bindNav() {
     });
   });
 
-  // Отмена ожидания
-  document.getElementById('btn-cancel-wait')?.addEventListener('click', () => { stopSearchUI(); WS.disconnect(); showScreen('menu'); });
+  // Отмена ожидания / расстановки
+  document.getElementById('btn-cancel-wait')?.addEventListener('click', () => {
+    if (WS.socket && WS.roomId) {
+      WS.socket.emit('leave_room', { roomId: WS.roomId });
+    }
+    stopSearchUI();
+    WS.disconnect();
+    showScreen('menu');
+  });
 
   // Закрытие модалки по overlay
   document.getElementById('modal-overlay')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });

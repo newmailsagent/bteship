@@ -731,6 +731,20 @@ io.on('connection', (socket) => {
     }
   });
 
+  // п.7: явный уход с расстановки до старта игры
+  socket.on('leave_room', ({ roomId }) => {
+    const room = rooms.get(roomId);
+    if (!room || room.over || room.started) return; // если игра уже идёт — обрабатывает surrender/disconnect
+    const leaver = getPlayer(room, socket.id);
+    const stayer = getOpponent(room, socket.id);
+    room.over = true;
+    clearTurnTimer(room);
+    if (stayer?.socketId) {
+      io.to(stayer.socketId).emit('opponent_left');
+    }
+    rooms.delete(roomId);
+  });
+
   // п.5: сдача
   socket.on('surrender', ({ roomId }) => {
     const room = rooms.get(roomId);
