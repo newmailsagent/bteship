@@ -877,6 +877,10 @@ const Placement = {
       }
     }, 600);
 
+    // setPointerCapture — все pointermove/up гарантированно приходят на этот элемент
+    // даже когда палец ушёл далеко за пределы доски
+    try { e.target.setPointerCapture(e.pointerId); } catch(_) {}
+
     const onMove = (ev) => this._onBoardMove(ev);
     const onUp   = (ev) => { this._onBoardUp(ev); document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); document.removeEventListener('pointercancel', onUp); };
 
@@ -889,6 +893,7 @@ const Placement = {
       pointerId: e.pointerId,
       longTimer, moved: false,
       startX: e.clientX, startY: e.clientY,
+      target: e.target,   // сохраняем для releasePointerCapture
     };
   },
 
@@ -1014,7 +1019,7 @@ const Placement = {
     const boardEl = document.getElementById('placement-board');
     if (!boardEl) return;
     boardEl.innerHTML = '';
-    // DOM пересоздан — сбрасываем кэш ячеек превью
+    // DOM пересоздан — сбрасываем кэш ссылок на ячейки превью
     this._previewCells = [];
     this._previewR = undefined; this._previewC = undefined; this._previewV = undefined;
     const cellShipMap = {};
@@ -1095,7 +1100,6 @@ const Placement = {
     const clampedX = Math.max(rect.left, Math.min(rect.right  - 1, cx));
     const clampedY = Math.max(rect.top,  Math.min(rect.bottom - 1, cy));
 
-    // gap между ячейками = 2px (из CSS), 9 gaps на 10 ячеек
     const cellW = (rect.width  - 2 * 9) / BOARD_SIZE;
     const cellH = (rect.height - 2 * 9) / BOARD_SIZE;
     let c = Math.floor((clampedX - rect.left) / (cellW + 2));
@@ -1107,11 +1111,11 @@ const Placement = {
     if (this.vertical) r = Math.min(r, BOARD_SIZE - size);
     else               c = Math.min(c, BOARD_SIZE - size);
 
-    // Не перерисовываем если ячейка не изменилась — устраняет мигание
+    // Не перерисовываем если ячейка не изменилась — убирает мигание
     if (this._previewR === r && this._previewC === c && this._previewV === this.vertical) return;
     this._previewR = r; this._previewC = c; this._previewV = this.vertical;
 
-    // Снимаем классы только с закэшированных ячеек (быстрее querySelectorAll)
+    // Снимаем классы только с закэшированных ячеек (быстрее querySelectorAll по всей доске)
     if (this._previewCells) {
       this._previewCells.forEach(el => el.classList.remove('preview', 'invalid'));
     }
@@ -1128,26 +1132,51 @@ const Placement = {
 
   _dropAt(cx, cy, ship) {
     const boardEl = document.getElementById('placement-board');
-    if (boardEl) {
-      const rect = boardEl.getBoundingClientRect();
-      if (cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom) {
-        const cellW = (rect.width  - 2 * 9) / BOARD_SIZE;
-        const cellH = (rect.height - 2 * 9) / BOARD_SIZE;
-        let c = Math.max(0, Math.min(BOARD_SIZE - 1, Math.floor((cx - rect.left) / (cellW + 2))));
-        let r = Math.max(0, Math.min(BOARD_SIZE - 1, Math.floor((cy - rect.top)  / (cellH + 2))));
-        const size = ship.size;
-        if (this.vertical) r = Math.min(r, BOARD_SIZE - size);
-        else               c = Math.min(c, BOARD_SIZE - size);
-        if (canPlace(this.board, r, c, size, this.vertical)) {
-          ship.vertical = this.vertical;
-          ship.cells = placeShip(this.board, r, c, size, this.vertical);
-          ship.placed = true;
-          this.selected = null;
-          Sound.place(); vibrate([15]); return;
-        }
+    if (!boardEl) {
+      ship.placed = false; ship.cells = []; ship.vertical = false;
+      this.vertical = false; this.selected = null; return;
+    }
+
+    const rect  = boardEl.getBoundingClientRect();
+    const cellW = (rect.width  - 2 * 9) / BOARD_SIZE;
+    const cellH = (rect.height - 2 * 9) / BOARD_SIZE;
+    const size  = ship.size;
+
+    // Зажимаем координаты внутри доски — работает даже если палец отпущен за краем
+    const clampedX = Math.max(rect.left, Math.min(rect.right  - 1, cx));
+    const clampedY = Math.max(rect.top,  Math.min(rect.bottom - 1, cy));
+
+    let baseC = Math.max(0, Math.min(BOARD_SIZE - 1, Math.floor((clampedX - rect.left) / (cellW + 2))));
+    let baseR = Math.max(0, Math.min(BOARD_SIZE - 1, Math.floor((clampedY - rect.top)  / (cellH + 2))));
+    if (this.vertical) baseR = Math.min(baseR, BOARD_SIZE - size);
+    else               baseC = Math.min(baseC, BOARD_SIZE - size);
+
+    // Сначала пробуем точную позицию
+    if (canPlace(this.board, baseR, baseC, size, this.vertical)) {
+      ship.vertical = this.vertical;
+      ship.cells = placeShip(this.board, baseR, baseC, size, this.vertical);
+      ship.placed = true; this.selected = null;
+      Sound.place(); vibrate([15]); return;
+    }
+
+    // Ищем ближайшую свободную клетку по спирали вокруг базовой точки
+    let bestR = -1, bestC = -1, bestDist = Infinity;
+    for (let r = 0; r <= BOARD_SIZE - (this.vertical ? size : 1); r++) {
+      for (let c = 0; c <= BOARD_SIZE - (this.vertical ? 1 : size); c++) {
+        if (!canPlace(this.board, r, c, size, this.vertical)) continue;
+        const dist = Math.hypot(r - baseR, c - baseC);
+        if (dist < bestDist) { bestDist = dist; bestR = r; bestC = c; }
       }
     }
-    // Промах — возвращаем в dok
+
+    if (bestR !== -1) {
+      ship.vertical = this.vertical;
+      ship.cells = placeShip(this.board, bestR, bestC, size, this.vertical);
+      ship.placed = true; this.selected = null;
+      Sound.place(); vibrate([15]); return;
+    }
+
+    // Совсем нет места — возвращаем в dok
     vibrate([20,10,20]);
     ship.placed = false; ship.cells = []; ship.vertical = false;
     this.vertical = false; this.selected = null;
@@ -1179,11 +1208,10 @@ const Placement = {
   },
 
   clearPreview() {
-    if (this._previewCells) {
+    if (this._previewCells && this._previewCells.length) {
       this._previewCells.forEach(el => el.classList.remove('preview', 'invalid'));
       this._previewCells = [];
     } else {
-      // Fallback на случай если кэш не инициализирован
       document.querySelectorAll('#placement-board .preview, #placement-board .invalid')
         .forEach(c => c.classList.remove('preview','invalid'));
     }
